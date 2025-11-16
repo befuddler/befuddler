@@ -136,7 +136,7 @@ def write_int():
     pop rsi
     mov r13, rsp
     and rsp, 0xfffffffffffffff0
-    lea rdi, format
+    lea rdi, int_out
     xor eax, eax
     call printf
     mov rdi, stdout
@@ -351,6 +351,24 @@ def go_away():
     mov {REG_DIRECTION}, rax
     """
 
+
+@define_instruction("&")
+def read_int():
+    return f"""
+    pop rsi
+    mov r13, rsp
+    and rsp, 0xfffffffffffffff0
+    sub rsp, 0x10
+    lea rdi, int_in
+    mov rsi, rsp
+    xor eax, eax
+    call scanf
+    mov rax, qword ptr [rsp]
+    mov rsp, r13
+    push rax
+    """
+
+
 @define_instruction(chr(255))
 def nop():
     return f""
@@ -443,8 +461,10 @@ def compile_befunge(befunge: list[list[str]]):
     {funge_space}
 
     .section .rodata
-    format:
+    int_out:
         .string "%d "
+    int_in:
+        .string "%d"
 
     instruction_lut:
     {instruction_lut}
