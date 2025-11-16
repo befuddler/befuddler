@@ -352,7 +352,8 @@ def parse_befunge(source: str):
         print(f"{YELLOW}WARNING:{RESET} tab found in source")
 
     lines = source.splitlines()
-    result = [list(line.ljust(WIDTH)) for line in lines]
+    lines = lines[:HEIGHT]
+    result = [list(line[:WIDTH].ljust(WIDTH)) for line in lines]
     result.extend([[" "] * WIDTH] * (HEIGHT - len(result)))
     return result
 
