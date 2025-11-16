@@ -341,6 +341,13 @@ string_mode_loop:
 string_mode_end:
     """
 
+@define_instruction("?")
+def go_away():
+    return f"""
+    call rand
+    and rax, 3
+    mov {REG_DIRECTION}, rax
+    """
 
 @define_instruction(chr(255))
 def nop():
@@ -414,6 +421,7 @@ def compile_befunge(befunge: list[list[str]]):
     return f"""
     .intel_syntax noprefix
     .extern printf
+    .extern rand
 
     .file "compiled.s"
     .globl main
