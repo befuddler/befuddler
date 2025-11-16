@@ -432,7 +432,7 @@ def compile_befunge(befunge: list[list[str]]):
 
     .section .rodata
     format:
-        .string "%d\\n"
+        .string "%d "
 
     instruction_lut:
     {instruction_lut}
