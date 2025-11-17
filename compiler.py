@@ -9,6 +9,11 @@ REG_RET_ADDR = "r14"
 WIDTH = 80
 HEIGHT = 25
 
+DIR_RIGHT = 0
+DIR_LEFT = 1
+DIR_DOWN = 2
+DIR_UP = 3
+
 RED = "\033[31m"
 YELLOW='\033[33m'
 RESET = "\033[0m"
@@ -180,28 +185,28 @@ def get_char():
 @define_instruction(">")
 def right():
     return f"""
-    mov {REG_DIRECTION}, 0
+    mov {REG_DIRECTION}, {DIR_RIGHT}
     """
 
 
 @define_instruction("<")
 def left():
     return f"""
-    mov {REG_DIRECTION}, 1
+    mov {REG_DIRECTION}, {DIR_LEFT}
     """
 
 
 @define_instruction("v")
 def down():
     return f"""
-    mov {REG_DIRECTION}, 2
+    mov {REG_DIRECTION}, {DIR_DOWN}
     """
 
 
 @define_instruction("^")
 def up():
     return f"""
-    mov {REG_DIRECTION}, 3
+    mov {REG_DIRECTION}, {DIR_UP}
     """
 
 
@@ -211,10 +216,10 @@ def horizontal_if():
     pop rax
     test rax, rax
     jz horizontal_if_false
-    mov {REG_DIRECTION}, 1  
+    mov {REG_DIRECTION}, {DIR_LEFT}
     jmp horizontal_if_done
 horizontal_if_false:
-    mov {REG_DIRECTION}, 0  
+    mov {REG_DIRECTION}, {DIR_RIGHT}
 horizontal_if_done:
     """
 
@@ -225,10 +230,10 @@ def vertical_if():
     pop rax
     test rax, rax
     jz vertical_if_false
-    mov {REG_DIRECTION}, 3  
+    mov {REG_DIRECTION}, {DIR_UP}
     jmp vertical_if_done
 vertical_if_false:
-    mov {REG_DIRECTION}, 2  
+    mov {REG_DIRECTION}, {DIR_DOWN}
 vertical_if_done:
     """
 
@@ -314,33 +319,90 @@ def put():
 @define_instruction('"')
 def string_mode():
     return f"""
-string_mode_loop:
-    # r14 += direction_deltas[REG_DIRECTION]
-    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
-    add r14, rdx
-
-    # Compute cell index: (r14 - program_start) / 5
+    # Compute cell index: (r14 - program_start) / 10
     mov rax, r14
     sub rax, OFFSET program_start
     mov rcx, 10
-    cqo
-    idiv rcx
+    xor rdx, rdx
+    div rcx
+
+    # Get line and char indeces: (rax / WIDTH, rax % WIDTH)
+    mov rcx, {WIDTH + 2}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+string_mode_loop:
+    cmp {REG_DIRECTION}, {DIR_RIGHT}
+    jne string_mode_dir_not_right
+
+    inc rsi
+    cmp rsi, {WIDTH}
+    jne string_mode_pos_set
+    mov rsi, 0
+
+    jmp string_mode_pos_set
+string_mode_dir_not_right:
+    cmp {REG_DIRECTION}, {DIR_LEFT}
+    jne string_mode_dir_up_or_down
+
+    dec rsi
+    cmp rsi, -1
+    jne string_mode_pos_set
+    mov rsi, {WIDTH - 1}
+
+    jmp string_mode_pos_set
+string_mode_dir_up_or_down:
+    cmp {REG_DIRECTION}, {DIR_DOWN}
+    jne string_mode_dir_up
+
+    inc rdi
+
+    cmp rdi, {HEIGHT}
+    jne string_mode_pos_set
+    mov rdi, 0
+
+    jmp string_mode_pos_set
+string_mode_dir_up:
+
+    dec rdi
+    cmp rdi, -1
+    jne string_mode_pos_set
+    mov rdi, {HEIGHT - 1}
+
+string_mode_pos_set:
+
+    # Set rax to funge space index
+    mov rax, rdi
+    mov rcx, {WIDTH + 2}
+    mul rcx
+    add rax, rsi
 
     # Load character from funge_space[rax]
-    mov al, byte ptr [funge_space + rax]
+    mov cl, byte ptr [funge_space + rax]
 
     # If '"', end string mode
-    cmp al, '"'
+    cmp cl, '"'
     je string_mode_end
 
     # Otherwise, push the character value
-    movzx rdx, al
+    movzx rdx, cl
     push rdx
 
     # Continue loop
     jmp string_mode_loop
 
 string_mode_end:
+    # Jump to correct position
+    mov rax, rdi
+    imul rax, {WIDTH + 2}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
     """
 
 @define_instruction("?")
@@ -452,10 +514,10 @@ def compile_befunge(befunge: list[list[str]]):
 
     direction_deltas:
         # used for quotes
-        .quad 10
-        .quad -10
-        .quad {(WIDTH + 2) * 10}
-        .quad {-(WIDTH + 2) * 10}
+        .quad 10 # right
+        .quad -10 # left
+        .quad {(WIDTH + 2) * 10} # down
+        .quad {-(WIDTH + 2) * 10} # up
 
     funge_space:
     {funge_space}
