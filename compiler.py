@@ -336,7 +336,6 @@ def get():
     test rax, rax
     jne get_in_range
 
-    and rsp, 0xfffffffffffffff0
     lea rdi, error_bad_read
     call print_error_and_exit
   
@@ -359,7 +358,6 @@ def put():
     test rax, rax
     jne put_in_range
 
-    and rsp, 0xfffffffffffffff0
     lea rdi, error_bad_write
     call print_error_and_exit
 
