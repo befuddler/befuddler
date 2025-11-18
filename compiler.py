@@ -436,7 +436,12 @@ string_mode_end:
 @define_instruction("?")
 def go_away():
     return f"""
-    call rand
+    mov rax, qword ptr [rand_seed]
+    mov rdx, 1103515245
+    mul rdx
+    add rax, 12345
+    mov qword ptr [rand_seed], rax
+    shr rax, 32
     and rax, 3
     mov {REG_DIRECTION}, rax
     """
@@ -532,7 +537,6 @@ def compile_befunge(befunge: list[list[str]]):
     .extern printf
     .extern fflush
     .extern stdout
-    .extern rand
 
     .file "compiled.s"
     .globl main
@@ -548,6 +552,9 @@ def compile_befunge(befunge: list[list[str]]):
 
     funge_space:
     {funge_space}
+
+    rand_seed:
+        .quad 0
 
     .section .rodata
     int_out:
@@ -619,6 +626,31 @@ in_range_exit:
         ret
 
     main:
+    # Set up rand seed
+    mov eax, 1
+    cpuid
+
+    bt ebx, 18
+    jc has_rdseed
+
+    bt ecx, 30
+    jc has_rdrand
+
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    jmp seed_in_rax
+
+    has_rdrand:
+    rdrand rax
+    jmp seed_in_rax
+
+    has_rdseed:
+    rdseed rax
+
+    seed_in_rax:
+    mov qword ptr [rand_seed], rax
+    
     # Reserve 0x1000 zero bytes on the stack
     sub rsp, 0x1000
     lea rdi, [rsp]
