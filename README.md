@@ -16,6 +16,8 @@ By doing this, we create a fixed-size grid, with 10 bytes per Befunge instructio
 
 On either side and above and below the grid, there are two layers of extraneous jump instructions. This makes wrapping possible, as moving to these instructions will automatically jump to the appropriate position. The second layer handles the case where a `#` instruction is at a border.
 
+![Code memory layout](./assets/code_memory.png)
+
 The "true" funge-space is still stored somewhere in memory, as must be the case for properly functioning `g`, `p`, and `"` instructions. However, it is only referenced for these instructions, and the rest are compiled. Using the `p` instruction only requires overwriting a single 5-byte jump instruction. To improve efficiency of the implementation of some instructions, each line in the funge-space is padded with bytes corresponding to the extraneous jump instructions in the text segment.
 
 ## Known Limitations
