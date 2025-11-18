@@ -628,8 +628,6 @@ program_start:"""
         instruction_lut += f"""
     .quad {function_name}"""
 
-    instr_bytes = 10
-
     return f""".intel_syntax noprefix
 
 .file "compiled.s"
@@ -712,6 +710,7 @@ nexti:
     sub r14, 10
     add r14, rdx
     push r14
+nexti_exit:
     ret
 
 print_error_and_exit:

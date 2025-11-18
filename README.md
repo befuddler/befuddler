@@ -2,6 +2,26 @@
 
 Befunge-93 compiler used in the BuckeyeCTF 2025 challenges `rev / befuddled` and `rev / befucked`
 
+## Debugger
+
+There is a debugger that allows you to watch the funge space and the cursor as the program executes. To use it, first compile your program
+
+```sh
+./befuddler.py examples/hello_world.bf
+```
+
+Then run gdb in one terminal with the gdbscript: 
+```sh
+gdb -x gdbscript.gdb examples/hello_world
+```
+
+And in another terminal run the python script which watches the gdb logs (`gdb.txt`) which are output from the gdbscript.
+```sh
+./debugger.py
+```
+
+Step through the program using `c` in the gdb terminal.
+
 ## Testing
 
 [Mycology](https://github.com/Deewiant/Mycology) is a standard Befunge test suite. Run `./test_mycology.sh` to run these tests and verify that the output looks as expected.
