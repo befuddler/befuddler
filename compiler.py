@@ -588,8 +588,6 @@ program_start:"""
 
     return f""".intel_syntax noprefix
 .extern scanf
-.extern fflush
-.extern stdout
 
 .file "compiled.s"
 .globl main
