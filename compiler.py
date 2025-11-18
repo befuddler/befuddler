@@ -294,9 +294,10 @@ get_in_range:
     imul rsi, {WIDTH + 4}
     add rsi, rdi
     xor rbx, rbx
-    mov bl, byte ptr [funge_space + rsi]
+    movsx rbx, byte ptr [funge_space + rsi]
     push rbx
     """
+
 
 @define_instruction("p")
 def put():
@@ -414,7 +415,7 @@ string_mode_pos_set:
     je string_mode_end
 
     # Otherwise, push the character value
-    movzx rdx, cl
+    movsx rdx, cl
     push rdx
 
     # Continue loop
@@ -430,6 +431,7 @@ string_mode_end:
     add rax, 5
     mov r14, rax
     """
+
 
 @define_instruction("?")
 def go_away():
@@ -577,7 +579,6 @@ def compile_befunge(befunge: list[list[str]]):
         sub r14, {WIDTH * 10}
         push r14
         ret
-
 
     top_edge:
         pop r14
