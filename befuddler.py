@@ -130,6 +130,9 @@ instruction_lut:
 
 {instruction_functions}
 
+nop:
+    ret
+
 left_edge:
     pop r14
     sub r14, 5

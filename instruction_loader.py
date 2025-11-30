@@ -744,9 +744,9 @@ class InstructionLoader:
         mov r14, rax
         """
 
-
-    @define_instruction(chr(255))
-    def nop(self):
+    @define_instruction(" ")
+    @b98
+    def space_nop(self):
         return f""
 
 
