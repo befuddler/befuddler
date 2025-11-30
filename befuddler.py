@@ -231,6 +231,9 @@ has_rdseed:
 seed_in_rax:
     mov qword ptr [rand_seed], rax
 
+    # Save rsp
+    mov rbp, rsp
+
     # Reserve 0x1000 zero bytes on the stack
     sub rsp, 0x1000
     lea rdi, [rsp]

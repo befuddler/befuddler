@@ -960,3 +960,16 @@ end_iterate:
     """
 
 
+    @define_instruction("n")
+    @b98
+    def clear_stack(self):
+        return f"""
+        mov rsp, rbp
+
+        # Reserve 0x1000 zero bytes on the stack
+        sub rsp, 0x1000
+        lea rdi, [rsp]
+        mov rcx, 0x1000
+        xor al, al
+        rep stosb
+    """
