@@ -14,8 +14,8 @@ HEIGHT = 25
 B98 = False
 
 DIR_RIGHT = 0
-DIR_LEFT = 1
-DIR_DOWN = 2
+DIR_DOWN = 1
+DIR_LEFT = 2
 DIR_UP = 3
 
 RED = "\033[31m"
@@ -23,9 +23,10 @@ YELLOW='\033[33m'
 RESET = "\033[0m"
 
 defined_instructions = {}
-
 instruction_names = {}
 
+defined_b98_instructions = {}
+b98_instruction_names = {}
 
 def define_instruction(char):
     def decorator(f):
@@ -34,11 +35,11 @@ def define_instruction(char):
 
     return decorator
 
+
 def define_b98_instruction(char):
     def decorator(f):
-        if B98:
-            defined_instructions[char] = f()
-            instruction_names[char] = f.__name__
+        defined_b98_instructions[char] = f()
+        b98_instruction_names[char] = f.__name__
 
     return decorator
 
@@ -560,6 +561,30 @@ int_not_negative:
     """
 
 
+@define_b98_instruction("r")
+def reflect():
+    return """
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    """
+
+
+@define_b98_instruction("[")
+def turn_left():
+    return """
+    dec {REG_DIRECTION}
+    and {REG_DIRECTION}, 3
+    """
+
+
+@define_b98_instruction("]")
+def turn_right():
+    return """
+    inc {REG_DIRECTION}
+    and {REG_DIRECTION}, 3
+    """
+
+
 @define_instruction(chr(255))
 def nop():
     return f""
@@ -578,6 +603,11 @@ def parse_befunge(source: str):
 
 def compile_befunge(befunge: list[list[str]]):
     instruction_functions = ""
+
+    if B98:
+        defined_instructions.update(defined_b98_instructions)
+        instruction_names.update(b98_instruction_names)
+
     for char, code in defined_instructions.items():
         name = instruction_names[char]
         instruction_functions += f"""
@@ -612,6 +642,9 @@ program_start:"""
             if name:
                 code_space += f"""
     call {name}"""
+            elif B98:
+                code_space += f"""
+    call reflect"""
             else:
                 code_space += f"""
     nop""" * 5
@@ -629,7 +662,8 @@ program_start:"""
 
     instruction_lut = ""
     for i in range(256):
-        function_name = instruction_names.get(chr(i), "nop")
+        default_instruction = "reflect" if B98 else "nop"
+        function_name = instruction_names.get(chr(i), default_instruction)
         instruction_lut += f"""
     .quad {function_name}"""
 
@@ -655,8 +689,8 @@ error_bad_read:
 direction_deltas:
     # used for quotes
     .quad 10 # right
-    .quad -10 # left
     .quad {(WIDTH + 4) * 10} # down
+    .quad -10 # left
     .quad {-(WIDTH + 4) * 10} # up
 
 instruction_lut:
