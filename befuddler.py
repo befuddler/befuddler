@@ -11,6 +11,8 @@ REG_RET_ADDR = "r14"
 WIDTH = 80
 HEIGHT = 25
 
+B98 = False
+
 DIR_RIGHT = 0
 DIR_LEFT = 1
 DIR_DOWN = 2
@@ -32,12 +34,13 @@ def define_instruction(char):
 
     return decorator
 
+def define_b98_instruction(char):
+    def decorator(f):
+        if B98:
+            defined_instructions[char] = f()
+            instruction_names[char] = f.__name__
 
-for d in "0123456789":
-    defined_instructions[d] = f"""
-    push {d}
-    """
-    instruction_names[d] = f"integer{d}"
+    return decorator
 
 
 @define_instruction("+")
@@ -775,9 +778,23 @@ seed_in_rax:
 """
 
 
+def init_int_instructions():
+    if B98:
+        ints = "0123456789"
+    else:
+        ints = "0123456789abcdef"
+
+    for d in ints:
+        defined_instructions[d] = f"""
+        push 0x{d}
+        """
+        instruction_names[d] = f"integer_{d}"
+    
+
 def main():
     global HEIGHT
     global WIDTH
+    global B98
     
     parser = ArgumentParser(
         prog="Befuddler",
@@ -786,12 +803,18 @@ def main():
     parser.add_argument("source", type=Path)
     parser.add_argument("--width", type=int, default=WIDTH)
     parser.add_argument("--height", type=int, default=HEIGHT)
+    parser.add_argument("--b98", action="store_true",
+                        help="enable minimal funge-98 support")
 
     args = parser.parse_args()
 
     WIDTH = args.width
     HEIGHT = args.height
-    
+
+    B98 = args.b98
+
+    init_int_instructions()
+        
     parsed = parse_befunge(args.source.read_text("latin-1"))
     compiled = compile_befunge(parsed)
     asm = args.source.with_suffix(".s")
