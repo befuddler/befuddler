@@ -3,783 +3,38 @@ from argparse import ArgumentParser
 from pathlib import Path
 import subprocess
 import struct
+from instruction_loader import InstructionLoader
 
 REG_DIRECTION = "r12"
 REG_RET_ADDR = "r14"
 
-# default values (may be overwritten)
-WIDTH = 80
-HEIGHT = 25
-
-B98 = False
-
-DIR_RIGHT = 0
-DIR_DOWN = 1
-DIR_LEFT = 2
-DIR_UP = 3
+DEFAULT_WIDTH = 80
+DEFAULT_HEIGHT = 25
 
 RED = "\033[31m"
 YELLOW='\033[33m'
 RESET = "\033[0m"
 
-defined_instructions = {}
-instruction_names = {}
-
-defined_b98_instructions = {}
-b98_instruction_names = {}
-
-
-def define_instruction(char):
-    def decorator(f):
-        defined_instructions[char] = f()
-        instruction_names[char] = f.__name__
-
-    return decorator
-
-
-def define_b98_instruction(char):
-    def decorator(f):
-        defined_b98_instructions[char] = f()
-        b98_instruction_names[char] = f.__name__
-
-    return decorator
-
-
-for d in "0123456789":
-    defined_instructions[d] = f"""
-    push 0x{d}
-    """
-    instruction_names[d] = f"integer_{d}"
-
-
-for d in "abcdef":
-    defined_b98_instructions[d] = f"""
-    push 0x{d}
-    """
-    b98_instruction_names[d] = f"integer_{d}"
-
-
-@define_instruction("+")
-def add():
-    return """
-    pop rdi
-    pop rsi
-    add rsi, rdi
-    push rsi
-    """
-
-
-@define_instruction("-")
-def subtract():
-    return """
-    pop rdi
-    pop rsi
-    sub rsi, rdi
-    push rsi
-    """
-
-
-@define_instruction("*")
-def multiply():
-    return """
-    pop rdi
-    pop rsi
-    imul rsi, rdi
-    push rsi
-    """
-
-
-@define_instruction("#")
-def skip():
-    return f"""
-    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
-    shl rdx, 1
-    sub r14, 5
-    add r14, rdx
-    """
-
-
-@define_instruction("/")
-def divide():
-    return """
-    pop rdi
-    pop rsi
-    test rdi, rdi
-    jz div_zero
-    mov rax, rsi
-    cqo
-    idiv rdi
-    push rax
-    jmp div_done
-div_zero:
-    push 0
-div_done:
-    """
-
-
-@define_instruction("%")
-def modulo():
-    return """
-    pop rdi
-    pop rsi
-    test rdi, rdi
-    jz mod_zero
-    mov rax, rsi
-    cqo
-    idiv rdi
-    push rdx
-    jmp mod_done
-mod_zero:
-    push 0
-mod_done:
-    """
-
-
-@define_instruction("!")
-def logical_not():
-    return """
-    pop rax
-    test rax, rax
-    setz al
-    movzx rax, al
-    push rax
-    """
-
-
-@define_instruction("`")
-def greater_than():
-    return """
-    pop rdi
-    pop rsi
-    cmp rsi, rdi
-    setg al
-    movzx rax, al
-    push rax
-    """
-
-
-@define_instruction(".")
-def write_int():
-    return """
-    pop rax
-
-    push r14
-    push r12
-    mov r13, rsp
-    mov rsi, 1
-    dec rsp
-    mov byte ptr [rsp], ' '
-
-    test rax, rax
-    jnz not_zero
-    dec rsp
-    inc rsi
-    mov byte ptr [rsp], '0'
-    jmp number_built
-not_zero:
-    mov rcx, 10
-    cqo
-    idiv rcx
-
-    test rax, rax
-    jz last_digit
-    test rdx, rdx
-    jge digit_positive
-    neg rdx
-digit_positive:
-    dec rsp
-    inc rsi
-    add rdx, '0'
-    mov byte ptr [rsp], dl
-    jmp not_zero
-   
-last_digit:
-    test rdx, rdx
-    jge last_digit_positive
-    neg rdx
-    dec rsp
-    inc rsi
-    add rdx, '0'
-    mov byte ptr [rsp], dl
-    dec rsp
-    inc rsi
-    mov byte ptr [rsp], '-'
-    jmp number_built
-    
-last_digit_positive:
-    dec rsp
-    inc rsi
-    add rdx, '0'
-    mov byte ptr [rsp], dl
-    
-number_built:
-    mov rax, 1
-    mov rdi, 1
-    mov rdx, rsi
-    lea rsi, [rsp]
-    syscall
-
-    mov rsp, r13
-    pop r12
-    pop r14
-    """
-
-
-@define_instruction(",")
-def write_char():
-    return """
-    lea rsi, [rsp]
-    push r14
-    push r12
-    mov rax, 1
-    mov rdi, 1
-    mov rdx, 1
-    syscall
-    pop r12
-    pop r14
-    pop rax
-    """
-
-
-@define_instruction("~")
-def get_char():
-    return """
-    push 0
-    lea rsi, [rsp]
-    push r14
-    push r12
-    mov rax, 0
-    mov rdi, 0
-    mov rdx, 1
-    syscall
-    pop r12
-    pop r14
-    """
-
-
-@define_instruction(">")
-def right():
-    return f"""
-    mov {REG_DIRECTION}, {DIR_RIGHT}
-    """
-
-
-@define_instruction("<")
-def left():
-    return f"""
-    mov {REG_DIRECTION}, {DIR_LEFT}
-    """
-
-
-@define_instruction("v")
-def down():
-    return f"""
-    mov {REG_DIRECTION}, {DIR_DOWN}
-    """
-
-
-@define_instruction("^")
-def up():
-    return f"""
-    mov {REG_DIRECTION}, {DIR_UP}
-    """
-
-
-@define_instruction("_")
-def horizontal_if():
-    return f"""
-    pop rax
-    test rax, rax
-    jz horizontal_if_false
-    mov {REG_DIRECTION}, {DIR_LEFT}
-    jmp horizontal_if_done
-horizontal_if_false:
-    mov {REG_DIRECTION}, {DIR_RIGHT}
-horizontal_if_done:
-    """
-
-
-@define_instruction("|")
-def vertical_if():
-    return f"""
-    pop rax
-    test rax, rax
-    jz vertical_if_false
-    mov {REG_DIRECTION}, {DIR_UP}
-    jmp vertical_if_done
-vertical_if_false:
-    mov {REG_DIRECTION}, {DIR_DOWN}
-vertical_if_done:
-    """
-
-
-@define_instruction(":")
-def duplicate():
-    return """
-    pop rax
-    push rax
-    push rax
-    """
-
-
-@define_instruction("\\")
-def swap():
-    return """
-    pop rax
-    pop rbx
-    push rax
-    push rbx
-    """
-
-
-@define_instruction("$")
-def pop_discard():
-    return """
-    pop rax
-    """
-
-
-@define_instruction("@")
-def exit():
-    return f"""
-    mov rax, 60
-    mov rdi, 0
-    syscall
-    """
-
-
-@define_instruction("g")
-def get():
-    return f"""
-    pop rsi # y
-    pop rdi # x
-    call in_range
-    test rax, rax
-    jne get_in_range
-
-    lea rdi, error_bad_read
-    call print_error_and_exit
-  
-get_in_range:
-    imul rsi, {WIDTH + 4}
-    add rsi, rdi
-    xor rbx, rbx
-    movsx rbx, byte ptr [funge_space + rsi]
-    push rbx
-    """
-
-
-@define_instruction("p")
-def put():
-    return f"""
-    pop rsi # y
-    pop rdi # x
-
-    call in_range
-    test rax, rax
-    jne put_in_range
-
-    lea rdi, error_bad_write
-    call print_error_and_exit
-
-put_in_range:
-    pop rdx # value
-    movzx rdx, dl
-    imul rsi, {WIDTH + 4}
-    mov rax, rsi
-    
-    # modify funge space
-    add rsi, rdi
-    mov byte ptr [funge_space + rsi], dl
-
-    # modify instruction
-    # get function address
-    mov r9, qword ptr [instruction_lut + rdx * 8]
-
-    add rax, rdi
-    imul rax, 10
-    lea rcx, [program_start + rax]
-
-    lea r11, [rcx + 5]
-    sub r9, r11
-
-    mov byte ptr [rcx], 0xe8
-    mov dword ptr [rcx + 1], r9d
-    """
-
-
-@define_instruction('"')
-def string_mode():
-    return f"""
-    # Compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # Get line and char indeces: (rax / WIDTH, rax % WIDTH)
-    mov rcx, {WIDTH + 4}
-    xor rdx, rdx
-    div rcx
-
-    mov rdi, rax # line
-    mov rsi, rdx # char
-
-string_mode_loop:
-    cmp {REG_DIRECTION}, {DIR_RIGHT}
-    jne string_mode_dir_not_right
-
-    inc rsi
-    cmp rsi, {WIDTH}
-    jne string_mode_pos_set
-    mov rsi, 0
-
-    jmp string_mode_pos_set
-string_mode_dir_not_right:
-    cmp {REG_DIRECTION}, {DIR_LEFT}
-    jne string_mode_dir_up_or_down
-
-    dec rsi
-    cmp rsi, -1
-    jne string_mode_pos_set
-    mov rsi, {WIDTH - 1}
-
-    jmp string_mode_pos_set
-string_mode_dir_up_or_down:
-    cmp {REG_DIRECTION}, {DIR_DOWN}
-    jne string_mode_dir_up
-
-    inc rdi
-
-    cmp rdi, {HEIGHT}
-    jne string_mode_pos_set
-    mov rdi, 0
-
-    jmp string_mode_pos_set
-string_mode_dir_up:
-
-    dec rdi
-    cmp rdi, -1
-    jne string_mode_pos_set
-    mov rdi, {HEIGHT - 1}
-
-string_mode_pos_set:
-
-    # Set rax to funge space index
-    mov rax, rdi
-    mov rcx, {WIDTH + 4}
-    mul rcx
-    add rax, rsi
-
-    # Load character from funge_space[rax]
-    mov cl, byte ptr [funge_space + rax]
-
-    # If '"', end string mode
-    cmp cl, '"'
-    je string_mode_end
-
-    # Otherwise, push the character value
-    movsx rdx, cl
-    push rdx
-
-    # Continue loop
-    jmp string_mode_loop
-
-string_mode_end:
-    # Jump to correct position
-    mov rax, rdi
-    imul rax, {WIDTH + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
-    """
-
-
-@define_instruction("?")
-def go_away():
-    return f"""
-    mov rax, qword ptr [rand_seed]
-    mov rdx, 1103515245
-    mul rdx
-    add rax, 12345
-    mov qword ptr [rand_seed], rax
-    shr rax, 32
-    and rax, 3
-    mov {REG_DIRECTION}, rax
-    """
-
-
-@define_instruction("&")
-def read_int():
-    return """
-    push r14
-    push r12
-    push 0
-
-skip_whitespace:
-    mov rax, 0
-    mov rdi, 0
-    lea rsi, [rsp]
-    mov rdx, 1
-    syscall
-
-    cmp byte ptr [rsp], ' '
-    je skip_whitespace
-    cmp byte ptr [rsp], '\\n'
-    je skip_whitespace
-    cmp byte ptr [rsp], '\\t'
-    je skip_whitespace
-
-    xor r13, r13
-    xor r15, r15
-    cmp byte ptr [rsp], '-'
-    jne read_int_loop
-
-    inc r15 # is negative
-    mov rax, 0
-    mov rdi, 0
-    lea rsi, [rsp]
-    mov rdx, 1
-    syscall
-
-read_int_loop:
-    sub byte ptr [rsp], '0'
-    cmp byte ptr [rsp], 9
-    ja int_reading_complete
-
-    mov rax, r13
-    mov rcx, 10
-    imul rcx
-    mov r13, rax
-    movzx rcx, byte ptr [rsp]
-    add r13, rcx
-
-    mov rax, 0
-    mov rdi, 0
-    lea rsi, [rsp]
-    mov rdx, 1
-    syscall
-
-    jmp read_int_loop
-int_reading_complete:
-    test r15, r15
-    jz int_not_negative
-    neg r13
-int_not_negative:
-    pop r12
-    pop r12
-    pop r14
-    push r13
-    """
-
-
-@define_b98_instruction("r")
-def reflect():
-    return f"""
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction("[")
-def turn_left():
-    return f"""
-    dec {REG_DIRECTION}
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction("]")
-def turn_right():
-    return f"""
-    inc {REG_DIRECTION}
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction("(")
-def load_semantics():
-    return f"""
-    pop rdi
-load_semantic:
-    test rdi, rdi
-    # always fail
-    jz semantic_load_fail
-    pop rsi
-    dec rdi
-    jmp load_semantic
-semantic_load_fail:
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction(")")
-def unload_semantics():
-    return f"""
-    pop rdi
-unload_semantic:
-    test rdi, rdi
-    # always fail
-    jz semantic_unload_fail
-    pop rsi
-    dec rdi
-    jmp unload_semantic
-semantic_unload_fail:
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction("q")
-def exit_with_code():
-    return f"""
-    mov rax, 60
-    pop rdi
-    syscall
-    """
-
-
-@define_b98_instruction("w")
-def compare():
-    return f"""
-    pop rdi
-    pop rsi
-    xor rax, rax
-    cmp rsi, rdi
-    jz dont_turn
-    jg greater
-    dec rax
-    jmp dont_turn
-greater:
-    inc rax
-dont_turn:
-    add {REG_DIRECTION}, rax
-    and {REG_DIRECTION}, 3
-    """
-
-
-@define_b98_instruction(";")
-def jump_over():
-    return f"""
-    # Compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # Get line and char indeces: (rax / WIDTH, rax % WIDTH)
-    mov rcx, {WIDTH + 4}
-    xor rdx, rdx
-    div rcx
-
-    mov rdi, rax # line
-    mov rsi, rdx # char
-
-jump_over_loop:
-    cmp {REG_DIRECTION}, {DIR_RIGHT}
-    jne jump_over_dir_not_right
-
-    inc rsi
-    cmp rsi, {WIDTH}
-    jne jump_over_pos_set
-    mov rsi, 0
-
-    jmp jump_over_pos_set
-jump_over_dir_not_right:
-    cmp {REG_DIRECTION}, {DIR_LEFT}
-    jne jump_over_dir_up_or_down
-
-    dec rsi
-    cmp rsi, -1
-    jne jump_over_pos_set
-    mov rsi, {WIDTH - 1}
-
-    jmp jump_over_pos_set
-jump_over_dir_up_or_down:
-    cmp {REG_DIRECTION}, {DIR_DOWN}
-    jne jump_over_dir_up
-
-    inc rdi
-
-    cmp rdi, {HEIGHT}
-    jne jump_over_pos_set
-    mov rdi, 0
-
-    jmp jump_over_pos_set
-jump_over_dir_up:
-
-    dec rdi
-    cmp rdi, -1
-    jne jump_over_pos_set
-    mov rdi, {HEIGHT - 1}
-
-jump_over_pos_set:
-
-    # Set rax to funge space index
-    mov rax, rdi
-    mov rcx, {WIDTH + 4}
-    mul rcx
-    add rax, rsi
-
-    # Load character from funge_space[rax]
-    mov cl, byte ptr [funge_space + rax]
-
-    # If ';', end jump over
-    cmp cl, ';'
-    je jump_over_end
-
-    # Continue loop
-    jmp jump_over_loop
-
-jump_over_end:
-    # Jump to correct position
-    mov rax, rdi
-    imul rax, {WIDTH + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
-    """
-
-
-@define_instruction(chr(255))
-def nop():
-    return f""
-
-
-@define_b98_instruction("z")
-def z_nop():
-    return f""
-
-
-@define_b98_instruction(" ")
-def space_nop():
-    return f""
-
-
-def parse_befunge(source: str):
+def parse_befunge(source: str, width: int, height: int):
     if "\t" in source:
         print(f"{YELLOW}WARNING:{RESET} tab found in source")
 
     lines = source.splitlines()
-    lines = lines[:HEIGHT]
-    result = [list(line[:WIDTH].ljust(WIDTH)) for line in lines]
-    result.extend([[" "] * WIDTH] * (HEIGHT - len(result)))
+    lines = lines[:height]
+    result = [list(line[:width].ljust(width)) for line in lines]
+    result.extend([[" "] * width] * (height- len(result)))
     return result
 
 
-def compile_befunge(befunge: list[list[str]]):
+def compile_befunge(befunge: list[list[str]],
+                    width: int, height: int, b98: bool,
+                    debug: bool):
     instruction_functions = ""
 
-    if B98:
-        defined_instructions.update(defined_b98_instructions)
-        instruction_names.update(b98_instruction_names)
+    instruction_loader = InstructionLoader(width, height, b98)
+
+    defined_instructions = instruction_loader.defined_instructions
+    instruction_names = instruction_loader.instruction_names
 
     for char, code in defined_instructions.items():
         name = instruction_names[char]
@@ -793,29 +48,30 @@ def compile_befunge(befunge: list[list[str]]):
 
     code_space = ""
 
-    for i in range(-2, HEIGHT + 2):
-        for j in range(-2, WIDTH + 2):
+    for i in range(-2, height + 2):
+        for j in range(-2, width+ 2):
             if (i, j) == (0, 0):
                 code_space += f"""
 program_start:"""
             if i < 0:
                 name = "top_edge"
-            elif i >= HEIGHT:
+            elif i >= height:
                 name = "bottom_edge"
             elif j < 0:
                 name = "left_edge"
-            elif j >= WIDTH:
+            elif j >= width:
                 name = "right_edge"
             else:
                 name = instruction_names.get(befunge[i][j])
-                if name:
-                    print(f"{RESET}{befunge[i][j]}", end="")
-                else:
-                    print(f"{RED}{befunge[i][j]}{RESET}", end="")
+                if debug:
+                    if name:
+                        print(f"{RESET}{befunge[i][j]}", end="")
+                    else:
+                        print(f"{RED}{befunge[i][j]}{RESET}", end="")
             if name:
                 code_space += f"""
     call {name}"""
-            elif B98:
+            elif b98:
                 code_space += f"""
     call reflect"""
             else:
@@ -823,7 +79,8 @@ program_start:"""
     nop""" * 5
             code_space += f"""
     call nexti"""
-        print()
+        if debug:
+            print()
 
     funge_space = ""
     for y, row in enumerate(befunge):
@@ -835,7 +92,7 @@ program_start:"""
 
     instruction_lut = ""
     for i in range(256):
-        default_instruction = "reflect" if B98 else "nop"
+        default_instruction = "reflect" if b98 else "nop"
         function_name = instruction_names.get(chr(i), default_instruction)
         instruction_lut += f"""
     .quad {function_name}"""
@@ -862,9 +119,9 @@ error_bad_read:
 direction_deltas:
     # used for quotes
     .quad 10 # right
-    .quad {(WIDTH + 4) * 10} # down
+    .quad {(width + 4) * 10} # down
     .quad -10 # left
-    .quad {-(WIDTH + 4) * 10} # up
+    .quad {-(width + 4) * 10} # up
 
 instruction_lut:
 {instruction_lut}
@@ -876,28 +133,28 @@ instruction_lut:
 left_edge:
     pop r14
     sub r14, 5
-    add r14, {WIDTH * 10}
+    add r14, {width * 10}
     push r14
     ret
 
 right_edge:
     pop r14
     sub r14, 5
-    sub r14, {WIDTH * 10}
+    sub r14, {width * 10}
     push r14
     ret
 
 top_edge:
     pop r14
     sub r14, 5
-    add r14, {((WIDTH + 4) * HEIGHT) * 10}
+    add r14, {((width + 4) * height) * 10}
     push r14
     ret
 
 bottom_edge:
     pop r14
     sub r14, 5
-    sub r14, {((WIDTH + 4) * HEIGHT) * 10}
+    sub r14, {((width + 4) * height) * 10}
     push r14
     ret
 
@@ -905,12 +162,12 @@ in_range:
     # check if x=rdi, y=rsi is in range
     # return iff in range
     mov rax, 1
-    cmp rdi, {WIDTH}
+    cmp rdi, {width}
     jb x_in_range
     dec rax
     jmp in_range_exit
 x_in_range:
-    cmp rsi, {HEIGHT}
+    cmp rsi, {height}
     jb in_range_exit
     dec rax
 in_range_exit:
@@ -983,32 +240,48 @@ seed_in_rax:
     jmp program_start
 {code_space}
 """
+
+
+def get_fit_size(source: Path):
+    max_len = 0
+    line_count = 0
+
+    with source.open("r", encoding="latin-1") as f:
+        for line in f:
+            line_count += 1
+            max_len = max(max_len, len(line.rstrip("\n")))
+
+    width = max_len
+    height = line_count
+    return width, height
     
 
 def main():
-    global HEIGHT
-    global WIDTH
-    global B98
-    
     parser = ArgumentParser(
         prog="Befuddler",
         description="Befunge compiler"
     )
     parser.add_argument("source", type=Path)
-    parser.add_argument("--width", type=int, default=WIDTH)
-    parser.add_argument("--height", type=int, default=HEIGHT)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
+    parser.add_argument("--height", type=int, default=DEFAULT_HEIGHT)
+    parser.add_argument("--fit_size", action="store_true",
+                        help="set size to fit source")
     parser.add_argument("--b98", action="store_true",
                         help="enable minimal funge-98 support")
 
     args = parser.parse_args()
 
-    WIDTH = args.width
-    HEIGHT = args.height
+    if args.fit_size:
+        width, height = get_fit_size(args.source)
+        print(f"Detected (width, height): ({width}, {height})")
+    else:
+        width = args.width
+        height = args.height
 
-    B98 = args.b98
 
-    parsed = parse_befunge(args.source.read_text("latin-1"))
-    compiled = compile_befunge(parsed)
+    parsed = parse_befunge(args.source.read_text("latin-1"), width, height)
+    compiled = compile_befunge(parsed, width, height, args.b98, args.debug)
     asm = args.source.with_suffix(".s")
     exe = args.source.with_name(args.source.stem)
     asm.write_text(compiled)
