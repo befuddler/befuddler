@@ -853,12 +853,93 @@ end_iterate:
     @b98
     def clear_stack(self):
         return f"""
-        mov rsp, rbp
+    mov rsp, rbp
 
-        # Reserve 0x1000 zero bytes on the stack
-        sub rsp, 0x1000
-        lea rdi, [rsp]
-        mov rcx, 0x1000
-        xor al, al
-        rep stosb
+    # Reserve 0x1000 zero bytes on the stack
+    sub rsp, 0x1000
+    lea rdi, [rsp]
+    mov rcx, 0x1000
+    xor al, al
+    rep stosb
+    """
+
+    @define_instruction("'")
+    @b98
+    def push_char(self):
+        return f"""
+    # Compute cell index: (r14 - program_start) / 10
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # Get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+    call update_line_char
+
+    # Set rax to funge space index
+    mov rax, rdi
+    mov rcx, {self.width + 4}
+    mul rcx
+    add rax, rsi
+
+    # Load character from funge_space[rax]
+    mov cl, byte ptr [funge_space + rax]
+
+    # Push the character value
+    movsx rdx, cl
+    push rdx
+
+    # Jump to correct position
+    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+    shl rdx, 1
+    sub r14, 5
+    add r14, rdx
+    """
+
+
+    @define_instruction("s")
+    @b98
+    def store_char(self):
+        return f"""
+    # Compute cell index: (r14 - program_start) / 10
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # Get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+    call update_line_char
+
+    # Set rax to funge space index
+    mov rax, rdi
+    mov rcx, {self.width + 4}
+    mul rcx
+    add rax, rsi
+
+    # Modify funge space
+    pop rdx # value
+    movzx rdx, dl
+    mov byte ptr [funge_space + rax], dl
+
+    # Jump to correct position
+    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+    shl rdx, 1
+    sub r14, 5
+    add r14, rdx
     """
