@@ -662,6 +662,92 @@ dont_turn:
     """
 
 
+@define_b98_instruction(";")
+def jump_over():
+    return f"""
+    # Compute cell index: (r14 - program_start) / 10
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # Get line and char indeces: (rax / WIDTH, rax % WIDTH)
+    mov rcx, {WIDTH + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+jump_over_loop:
+    cmp {REG_DIRECTION}, {DIR_RIGHT}
+    jne jump_over_dir_not_right
+
+    inc rsi
+    cmp rsi, {WIDTH}
+    jne jump_over_pos_set
+    mov rsi, 0
+
+    jmp jump_over_pos_set
+jump_over_dir_not_right:
+    cmp {REG_DIRECTION}, {DIR_LEFT}
+    jne jump_over_dir_up_or_down
+
+    dec rsi
+    cmp rsi, -1
+    jne jump_over_pos_set
+    mov rsi, {WIDTH - 1}
+
+    jmp jump_over_pos_set
+jump_over_dir_up_or_down:
+    cmp {REG_DIRECTION}, {DIR_DOWN}
+    jne jump_over_dir_up
+
+    inc rdi
+
+    cmp rdi, {HEIGHT}
+    jne jump_over_pos_set
+    mov rdi, 0
+
+    jmp jump_over_pos_set
+jump_over_dir_up:
+
+    dec rdi
+    cmp rdi, -1
+    jne jump_over_pos_set
+    mov rdi, {HEIGHT - 1}
+
+jump_over_pos_set:
+
+    # Set rax to funge space index
+    mov rax, rdi
+    mov rcx, {WIDTH + 4}
+    mul rcx
+    add rax, rsi
+
+    # Load character from funge_space[rax]
+    mov cl, byte ptr [funge_space + rax]
+
+    # If ';', end jump over
+    cmp cl, ';'
+    je jump_over_end
+
+    # Continue loop
+    jmp jump_over_loop
+
+jump_over_end:
+    # Jump to correct position
+    mov rax, rdi
+    imul rax, {WIDTH + 4}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
+    """
+
+
 @define_instruction(chr(255))
 def nop():
     return f""
