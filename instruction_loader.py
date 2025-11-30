@@ -477,6 +477,7 @@ skip_p:
 
 
     @define_instruction('"')
+    @b93
     def string_mode(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
@@ -513,6 +514,72 @@ string_mode_loop:
     # otherwise, push the character value
     movsx rdx, cl
     push rdx
+
+    # continue loop
+    jmp string_mode_loop
+
+string_mode_end:
+    # jump to correct position
+    mov rax, rdi
+    imul rax, {self.width + 4}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
+    """
+
+
+    @define_instruction('"')
+    @b98
+    def string_mode(self):
+        return f"""
+    # compute cell index: (r14 - program_start) / 10
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+    xor r8, r8 # space last seen
+
+string_mode_loop:
+    call update_line_char
+
+    # set rax to funge space index
+    mov rax, rdi
+    mov rcx, {self.width + 4}
+    mul rcx
+    add rax, rsi
+
+    # load character from funge_space[rax]
+    mov cl, byte ptr [funge_space + rax]
+
+    # if '"', end string mode
+    cmp cl, '"'
+    je string_mode_end
+
+    cmp cl, ' '
+    je space_seen
+    xor r8, r8
+    # otherwise, push the character value
+string_mode_push_char:
+    movsx rdx, cl
+    push rdx
+    jmp string_mode_loop
+space_seen:
+    test r8, r8
+    jnz string_mode_loop
+    inc r8
+    jmp string_mode_push_char
 
     # continue loop
     jmp string_mode_loop
