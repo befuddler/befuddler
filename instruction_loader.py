@@ -18,6 +18,11 @@ def b98(f):
     return f
 
 
+def b93(f):
+    f._b93 = True
+    return f
+
+
 class InstructionLoader:
     def __init__(self, width: int, height: int, b98: bool):
         self.width = width
@@ -43,7 +48,13 @@ class InstructionLoader:
         for name in dir(self):
             attr = getattr(self, name)
             if hasattr(attr, "_instruction_name"):
-                if self.b98 or not getattr(attr, "_b98", False):
+                include = True
+                if getattr(attr, "_b98", False) and not b98:
+                    include = False
+                elif getattr(attr, "_b93", False) and b98:
+                    include = False
+
+                if include:
                     self.instruction_names[attr._instruction_name] = name
                     self.defined_instructions[attr._instruction_name] = attr()
 
@@ -338,6 +349,7 @@ vertical_if_done:
 
 
     @define_instruction("g")
+    @b93
     def get(self):
         return f"""
     pop rsi # y
@@ -358,7 +370,32 @@ get_in_range:
     """
 
 
+    @define_instruction("g")
+    @b98
+    def get(self):
+        return f"""
+    pop rsi # y
+    pop rdi # x
+    call in_range
+    test rax, rax
+    jne get_in_range
+
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    jmp skip_g
+
+get_in_range:
+    imul rsi, {self.width + 4}
+    add rsi, rdi
+    xor rbx, rbx
+    movsx rbx, byte ptr [funge_space + rsi]
+    push rbx
+skip_g:
+    """
+
+
     @define_instruction("p")
+    @b93
     def put(self):
         return f"""
     pop rsi # y
@@ -389,11 +426,53 @@ put_in_range:
     imul rax, 10
     lea rcx, [program_start + rax]
 
-    lea r11, [rcx + 5]
-    sub r9, r11
+    lea r15, [rcx + 5]
+    sub r9, r15
 
     mov byte ptr [rcx], 0xe8
     mov dword ptr [rcx + 1], r9d
+    """
+
+
+    @define_instruction("p")
+    @b98
+    def put(self):
+        return f"""
+    pop rsi # y
+    pop rdi # x
+
+    call in_range
+    test rax, rax
+    jne put_in_range
+
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    jmp skip_p
+
+put_in_range:
+    pop rdx # value
+    movzx rdx, dl
+    imul rsi, {self.width + 4}
+    mov rax, rsi
+
+    # modify funge space
+    add rsi, rdi
+    mov byte ptr [funge_space + rsi], dl
+
+    # modify instruction
+    # get function address
+    mov r9, qword ptr [instruction_lut + rdx * 8]
+
+    add rax, rdi
+    imul rax, 10
+    lea rcx, [program_start + rax]
+
+    lea r15, [rcx + 5]
+    sub r9, r15
+
+    mov byte ptr [rcx], 0xe8
+    mov dword ptr [rcx + 1], r9d
+skip_p:
     """
 
 
@@ -760,18 +839,123 @@ jump_over_end:
     @b98
     def iterate(self):
         return f"""
-    # TODO - actually implement
-    pop rdi
-    test rdi, rdi
-    jz skip_iterate
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
-    jmp end_iterate
-skip_iterate:
+    pop r10 # number of times to iterate
+    xor r8, r8 # not skipping flag
+    test r10, r10
+    jnz run_iterate
+    # Special case, zero acts as skip
     mov rdx, [direction_deltas + {REG_DIRECTION}*8]
     shl rdx, 1
     sub r14, 5
     add r14, rdx
+    jmp end_iterate
+
+run_iterate:
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # Get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+iterate_bad_char_or_skips:
+    cmp {REG_DIRECTION}, {DIR_RIGHT}
+    jne iterate_dir_not_right
+
+    inc rsi
+    cmp rsi, {self.width}
+    jne iterate_pos_set
+    mov rsi, 0
+
+    jmp iterate_pos_set
+iterate_dir_not_right:
+    cmp {REG_DIRECTION}, {DIR_LEFT}
+    jne iterate_dir_up_or_down
+
+    dec rsi
+    cmp rsi, -1
+    jne iterate_pos_set
+    mov rsi, {self.width - 1}
+
+    jmp iterate_pos_set
+iterate_dir_up_or_down:
+    cmp {REG_DIRECTION}, {DIR_DOWN}
+    jne iterate_dir_up
+
+    inc rdi
+
+    cmp rdi, {self.height}
+    jne iterate_pos_set
+    mov rdi, 0
+
+    jmp iterate_pos_set
+iterate_dir_up:
+
+    dec rdi
+    cmp rdi, -1
+    jne iterate_pos_set
+    mov rdi, {self.height - 1}
+
+iterate_pos_set:
+
+    # Set rax to funge space index
+    mov rax, rdi
+    mov rcx, {self.width + 4}
+    mul rcx
+    add rax, rsi
+
+    test r8, r8
+    jnz keep_skipping
+
+    # Load character from funge_space[rax]
+    mov cl, byte ptr [funge_space + rax]
+    cmp cl, ' '
+    je iterate_bad_char_or_skips
+    cmp cl, ';'
+    je iterate_bad_char_or_skips
+
+    cmp cl, '#'
+    jne normal_iterate
+    inc r8 # set skipping flag
+    jmp run_iterate
+
+keep_skipping:
+    dec r10
+    jnz iterate_bad_char_or_skips
+
+    # Jump to correct position
+    mov rax, rdi
+    imul rax, {self.width + 4}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
+
+    jmp end_iterate
+normal_iterate:
+    movzx rcx, cl
+
+    # NOTE - this section assumes r10, r8, and r11
+    # are untouched by whatever function this thing
+    # calls...
+    mov r8, qword ptr [instruction_lut + rcx * 8]
+
+    mov r11, r14
+iterate_again:
+    call r8
+    dec r10
+    jnz iterate_again
+
+    mov r14, r11
+
 end_iterate:
     """
 
