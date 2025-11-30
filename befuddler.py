@@ -643,6 +643,25 @@ def exit_with_code():
     """
 
 
+@define_b98_instruction("w")
+def compare():
+    return f"""
+    pop rdi
+    pop rsi
+    xor rax, rax
+    cmp rsi, rdi
+    jz dont_turn
+    jg greater
+    dec rax
+    jmp dont_turn
+greater:
+    inc rax
+dont_turn:
+    add {REG_DIRECTION}, rax
+    and {REG_DIRECTION}, 3
+    """
+
+
 @define_instruction(chr(255))
 def nop():
     return f""
