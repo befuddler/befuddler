@@ -217,7 +217,9 @@ number_built:
     mov rdi, 1
     mov rdx, rsi
     lea rsi, [rsp]
+    push r11
     syscall
+    pop r11
 
     mov rsp, r13
     pop r12
@@ -231,10 +233,12 @@ number_built:
     lea rsi, [rsp]
     push r14
     push r12
+    push r11
     mov rax, 1
     mov rdi, 1
     mov rdx, 1
     syscall
+    pop r11
     pop r12
     pop r14
     pop rax
@@ -248,10 +252,12 @@ number_built:
     lea rsi, [rsp]
     push r14
     push r12
+    push r11
     mov rax, 0
     mov rdi, 0
     mov rdx, 1
     syscall
+    pop r11
     pop r12
     pop r14
     """
@@ -580,10 +586,6 @@ space_seen:
     jnz string_mode_loop
     inc r8
     jmp string_mode_push_char
-
-    # continue loop
-    jmp string_mode_loop
-
 string_mode_end:
     # jump to correct position
     mov rax, rdi
@@ -615,6 +617,7 @@ string_mode_end:
         return """
     push r14
     push r12
+    push r11
     push 0
 
 skip_whitespace:
@@ -667,7 +670,8 @@ int_reading_complete:
     jz int_not_negative
     neg r13
 int_not_negative:
-    pop r12
+    pop r11
+    pop r11
     pop r12
     pop r14
     push r13
@@ -1009,4 +1013,93 @@ end_iterate:
     shl rdx, 1
     sub r14, 5
     add r14, rdx
+    """
+
+
+    @define_instruction("x")
+    @b98
+    def absolute_delta(self):
+        return f"""
+    # NOTE - this reflects on non-cardinal directions
+    pop rsi # y
+    pop rdi # x
+    test rdi, rdi
+    jz delta_x_zero
+    test rsi, rsi
+    jnz bad_delta
+    cmp rdi, 1
+    jne delta_y_zero_x_not_1
+    mov {REG_DIRECTION}, {DIR_RIGHT}
+    jmp delta_set
+delta_y_zero_x_not_1:
+    cmp rdi, -1
+    jne bad_delta
+    mov {REG_DIRECTION}, {DIR_LEFT}
+    jmp delta_set
+delta_x_zero:
+    cmp rsi, 1
+    jne delta_x_zero_y_not_1
+    mov {REG_DIRECTION}, {DIR_UP}
+    jmp delta_set
+delta_x_zero_y_not_1:
+    cmp rsi, -1
+    jne bad_delta
+    mov {REG_DIRECTION}, {DIR_DOWN}
+    jmp delta_set
+bad_delta:
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+delta_set:
+    """
+
+
+    @define_instruction("j")
+    @b98
+    def jump(self):
+        return f"""
+    pop r10 # number of times to skip
+
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    mov rdi, rax # line
+    mov rsi, rdx # char
+
+    test r10, r10
+    jg jump_forwards_loop
+    jz skip_jumping
+
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+jump_backwards_loop:
+    call update_line_char
+    inc r10
+    jnz jump_backwards_loop
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    jmp jumping_done
+
+jump_forwards_loop:
+    call update_line_char
+    dec r10
+    jnz jump_forwards_loop
+
+jumping_done:
+    # jump to correct position
+    mov rax, rdi
+    imul rax, {self.width + 4}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
+skip_jumping:
     """
