@@ -634,6 +634,15 @@ semantic_unload_fail:
     """
 
 
+@define_b98_instruction("q")
+def exit_with_code():
+    return f"""
+    mov rax, 60
+    pop rdi
+    syscall
+    """
+
+
 @define_instruction(chr(255))
 def nop():
     return f""
