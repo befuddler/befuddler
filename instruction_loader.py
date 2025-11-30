@@ -744,12 +744,6 @@ class InstructionLoader:
         mov r14, rax
         """
 
-    @define_instruction(" ")
-    @b98
-    def space_nop(self):
-        return f""
-
-
     @define_instruction("z")
     @b98
     def z_nop(self):
@@ -760,4 +754,25 @@ class InstructionLoader:
     @b98
     def space_nop(self):
         return f""
+
+
+    @define_instruction("k")
+    @b98
+    def iterate(self):
+        return f"""
+        # TODO - actually implement
+        pop rdi
+        test rdi, rdi
+        jz skip_iterate
+        add {REG_DIRECTION}, 2
+        and {REG_DIRECTION}, 3
+        jmp end_iterate
+    skip_iterate:
+        mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+        shl rdx, 1
+        sub r14, 5
+        add r14, rdx
+    end_iterate:
+        """
+
 
