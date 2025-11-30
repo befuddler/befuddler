@@ -6,6 +6,8 @@ import struct
 
 REG_DIRECTION = "r12"
 REG_RET_ADDR = "r14"
+
+# default values (may be overwritten)
 WIDTH = 80
 HEIGHT = 25
 
@@ -774,10 +776,22 @@ seed_in_rax:
 
 
 def main():
-    parser = ArgumentParser()
+    global HEIGHT
+    global WIDTH
+    
+    parser = ArgumentParser(
+        prog="Befuddler",
+        description="Befunge compiler"
+    )
     parser.add_argument("source", type=Path)
+    parser.add_argument("--width", type=int, default=WIDTH)
+    parser.add_argument("--height", type=int, default=HEIGHT)
+
     args = parser.parse_args()
 
+    WIDTH = args.width
+    HEIGHT = args.height
+    
     parsed = parse_befunge(args.source.read_text("latin-1"))
     compiled = compile_befunge(parsed)
     asm = args.source.with_suffix(".s")
