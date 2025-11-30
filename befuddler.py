@@ -28,6 +28,7 @@ instruction_names = {}
 defined_b98_instructions = {}
 b98_instruction_names = {}
 
+
 def define_instruction(char):
     def decorator(f):
         defined_instructions[char] = f()
@@ -42,6 +43,20 @@ def define_b98_instruction(char):
         b98_instruction_names[char] = f.__name__
 
     return decorator
+
+
+for d in "0123456789":
+    defined_instructions[d] = f"""
+    push 0x{d}
+    """
+    instruction_names[d] = f"integer_{d}"
+
+
+for d in "abcdef":
+    defined_b98_instructions[d] = f"""
+    push 0x{d}
+    """
+    b98_instruction_names[d] = f"integer_{d}"
 
 
 @define_instruction("+")
@@ -563,7 +578,7 @@ int_not_negative:
 
 @define_b98_instruction("r")
 def reflect():
-    return """
+    return f"""
     add {REG_DIRECTION}, 2
     and {REG_DIRECTION}, 3
     """
@@ -571,7 +586,7 @@ def reflect():
 
 @define_b98_instruction("[")
 def turn_left():
-    return """
+    return f"""
     dec {REG_DIRECTION}
     and {REG_DIRECTION}, 3
     """
@@ -579,14 +594,58 @@ def turn_left():
 
 @define_b98_instruction("]")
 def turn_right():
-    return """
+    return f"""
     inc {REG_DIRECTION}
+    and {REG_DIRECTION}, 3
+    """
+
+
+@define_b98_instruction("(")
+def load_semantics():
+    return f"""
+    pop rdi
+load_semantic:
+    test rdi, rdi
+    # always fail
+    jz semantic_load_fail
+    pop rsi
+    dec rdi
+    jmp load_semantic
+semantic_load_fail:
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    """
+
+
+@define_b98_instruction(")")
+def unload_semantics():
+    return f"""
+    pop rdi
+unload_semantic:
+    test rdi, rdi
+    # always fail
+    jz semantic_unload_fail
+    pop rsi
+    dec rdi
+    jmp unload_semantic
+semantic_unload_fail:
+    add {REG_DIRECTION}, 2
     and {REG_DIRECTION}, 3
     """
 
 
 @define_instruction(chr(255))
 def nop():
+    return f""
+
+
+@define_b98_instruction("z")
+def z_nop():
+    return f""
+
+
+@define_b98_instruction(" ")
+def space_nop():
     return f""
 
 
@@ -810,19 +869,6 @@ seed_in_rax:
     jmp program_start
 {code_space}
 """
-
-
-def init_int_instructions():
-    if B98:
-        ints = "0123456789"
-    else:
-        ints = "0123456789abcdef"
-
-    for d in ints:
-        defined_instructions[d] = f"""
-        push 0x{d}
-        """
-        instruction_names[d] = f"integer_{d}"
     
 
 def main():
@@ -847,8 +893,6 @@ def main():
 
     B98 = args.b98
 
-    init_int_instructions()
-        
     parsed = parse_befunge(args.source.read_text("latin-1"))
     compiled = compile_befunge(parsed)
     asm = args.source.with_suffix(".s")
