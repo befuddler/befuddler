@@ -1275,9 +1275,6 @@ y_17_exclude:
     jne y_16_exclude
 y_16_include:
 
-    # TODO
-    push 0
-
     mov rax, 0xc9
     mov rdi, 0
     push r14
@@ -1289,23 +1286,24 @@ y_16_include:
     # rax: seconds since 1970-01-01 00:00:00 +0000 (UTC).
 
     mov rcx, 60
+    xor rdx, rdx
     div rcx
 
-    mov r9, rax # rax = (second)
+    mov r9, rdx # r9 = (second)
 
-    mov rax, rdx
     mov rcx, 60
+    xor rdx, rdx
     div rcx
 
     shl rdx, 8
-    add r9, rdx # rax = (minute * 256) + (second)
+    add r9, rdx # r9 = (minute * 256) + (second)
 
-    mov rax, rdx
-    mov rcx, 60
+    mov rcx, 24
+    xor rdx, rdx
     div rcx
 
-    shl rdx, 8
-    add r9, rdx # rax = (hour * 256 * 256) + (minute * 256) + (second)
+    shl rdx, 16
+    add r9, rdx # r9 = (hour * 256 * 256) + (minute * 256) + (second)
     push r9
 
     # 15. 1 cell containing current ((year - 1900) * 256 * 256) + (month * 256) + (day of month) (env)
