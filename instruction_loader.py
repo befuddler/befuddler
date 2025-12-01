@@ -1204,9 +1204,14 @@ skip_jumping:
         return f"""
 
     # get stack size
-    mov rax, rbp
-    sub rax, rsp
-    sub rax, {STACK_ZERO_SIZE}
+    mov rsi, rbp
+    sub rsi, rsp
+    sub rsi, {STACK_ZERO_SIZE}
+    sar rsi, 3
+    test rsi, rsi
+    jg y_stack_size_positive
+    xor rsi, rsi
+y_stack_size_positive:
 
     pop rdi
     cmp rdi, 20
@@ -1252,7 +1257,7 @@ y_19_exclude:
     jne y_18_exclude
 y_18_include:
 
-    push rax
+    push rsi
 
     # 17. 1 cell containing the total number of stacks currently in use by the IP (size of stack stack) (ip)
 
