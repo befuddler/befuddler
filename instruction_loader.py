@@ -13,6 +13,7 @@ MAX_INPUT_LEN = 32
 
 STACK_ZERO_SIZE = 0x1000
 
+
 def define_instruction(char):
     def decorator(f):
         f._instruction_name = char
@@ -1312,7 +1313,7 @@ y_16_include:
     push r9
 
     # 15. 1 cell containing current ((year - 1900) * 256 * 256) + (month * 256) + (day of month) (env)
-
+    
 y_16_exclude:
     test rdi, rdi
     jle y_15_include
@@ -1320,14 +1321,70 @@ y_16_exclude:
     jne y_15_exclude
 y_15_include:
 
-    # "Thirty days has September,
+    # "Thirty days hath September,
     #  April, June, and November,
     #  All the rest have thirty-one,
     #  Except February because it's weird, like 28 usually but then 29 on leap years,
     #  and leap years are every 4 years but NOT every 100 years except they ARE every 400 years..."
+    #
+    # TODO - The code must be updated for the 100 and 400 year rules by 2100 AD
 
-    # TODO
-    push 0
+    mov rsi, 1970 # year
+y_keep_setting_year:
+    mov r9, 365
+    mov r15, rsi
+    xor r8, r8 # is_leap_year
+    and r15, 3
+    test r15, r15
+    jnz not_leap_year
+    inc r9
+    mov r8, 1
+not_leap_year:
+    cmp rax, r9
+    jl y_year_set
+    inc rsi
+    sub rax, r9
+    jmp y_keep_setting_year
+y_year_set:
+    sub rsi, 1900
+    shl rsi, 16
+    push rsi
+
+    mov rsi, 1 # month
+y_keep_setting_month:
+    mov r9, 31 # default month length
+    cmp rsi, 2 # February
+    jne y_not_february
+    mov r9, 28
+    test r8, r8
+    jz y_month_length_set
+    inc r9
+    jmp y_month_length_set
+y_not_february:
+    cmp rsi, 9 # September
+    je y_thirty_day_month
+    cmp rsi, 4 # April
+    je y_thirty_day_month
+    cmp rsi, 6 # June
+    je y_thirty_day_month
+    cmp rsi, 11 # November
+    jne y_month_length_set
+y_thirty_day_month:
+    dec r9
+y_month_length_set:
+    cmp rax, r9
+    jl y_month_set
+    inc rsi
+    sub rax, r9
+    jmp y_keep_setting_month
+y_month_set:
+    pop r9
+    shl rsi, 8
+    add r9, rsi
+    inc rax
+    add r9, rax
+
+    push r9
     
     # 14. 1 vector containing the greatest point which contains a non-space cell, relative to the least point (env)
 
