@@ -16,6 +16,8 @@ DIR_UP = 3
 MAX_FINGERPRINT_LEN = 8
 MAX_INPUT_LEN = 32
 
+STACK_ZERO_SIZE = 0x1000
+
 DEFAULT_WIDTH = 80
 DEFAULT_HEIGHT = 25
 
@@ -180,6 +182,8 @@ error_bad_write:
     .string "ERROR: Attempt to write outside of funge-space\\n"
 error_bad_read:
     .string "ERROR: Attempt to read outside of funge-space\\n"
+error_undefined_value:
+    .string "ERROR: Attempt to access undefined value\\n"
 
 direction_deltas:
     # used for quotes
@@ -337,10 +341,10 @@ seed_in_rax:
     # save rsp
     mov rbp, rsp
 
-    # reserve 0x1000 zero bytes on the stack
-    sub rsp, 0x1000
+    # reserve {STACK_ZERO_SIZE} zero bytes on the stack
+    sub rsp, {STACK_ZERO_SIZE}
     lea rdi, [rsp]
-    mov rcx, 0x1000
+    mov rcx, {STACK_ZERO_SIZE}
     xor al, al
     rep stosb
 

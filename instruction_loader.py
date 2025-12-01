@@ -11,6 +11,8 @@ DIR_UP = 3
 MAX_FINGERPRINT_LEN = 8
 MAX_INPUT_LEN = 32
 
+STACK_ZERO_SIZE = 0x1000
+
 def define_instruction(char):
     def decorator(f):
         f._instruction_name = char
@@ -79,9 +81,9 @@ class InstructionLoader:
                 include = True
                 if hasattr(attr, "_fingerprint_id"):
                     include = False
-                elif getattr(attr, "_b98", False) and not b98:
+                if getattr(attr, "_b98", False) and not self.b98:
                     include = False
-                elif getattr(attr, "_b93", False) and b98:
+                if getattr(attr, "_b93", False) and self.b98:
                     include = False
 
                 if include:
@@ -1017,10 +1019,10 @@ end_iterate:
         return f"""
     mov rsp, rbp
 
-    # reserve 0x1000 zero bytes on the stack
-    sub rsp, 0x1000
+    # reserve {STACK_ZERO_SIZE} zero bytes on the stack
+    sub rsp, {STACK_ZERO_SIZE}
     lea rdi, [rsp]
-    mov rcx, 0x1000
+    mov rcx, {STACK_ZERO_SIZE}
     xor al, al
     rep stosb
     """
@@ -1195,16 +1197,365 @@ jumping_done:
 skip_jumping:
     """
 
+
+    @define_instruction("y")
+    @b98
+    def get_sys_info(self):
+        return f"""
+
+    # get stack size
+    mov rax, rbp
+    sub rax, rsp
+    sub rax, {STACK_ZERO_SIZE}
+
+    pop rdi
+    cmp rdi, 20
+    jle y_valid_input
+    lea rdi, error_bad_read
+    call print_error_and_exit
+y_valid_input:
+
+    # 20. a series of strings, each terminated by a null, the series terminated by an additional null, containing the environment variables. (env)
+    #         The format for each variable setting is NAME=VALUE.
+
+    test rdi, rdi
+    jle y_20_include
+    cmp rdi, 20
+    jne y_20_exclude
+y_20_include:
+
+    # TODO
+    push 0
+
+    # 19. a series of sequences of characters (strings), each terminated by a null, the series terminated by an additional double null, containing the command-line arguments. (env)
+    #         This means any isolated argument can be a null string, but no two consecutive arguments may be null strings - a rather contrived scenario, null string arguments being rare in themselves.
+    #         The first string is the name of the Funge source program being run.
+
+y_20_exclude:
+    test rdi, rdi
+    jle y_19_include
+    cmp rdi, 19
+    jne y_19_exclude
+y_19_include:
+
+    # TODO
+    push 0
+    push 0
+
+    # 18. size-of-stack-stack cells containing size of each stack, listed from TOSS to BOSS (ip)
+    #         Stack sizes are pushed as if they were measured before y began pushing elements onto the stack.
+
+y_19_exclude:
+    test rdi, rdi
+    jle y_18_include
+    cmp rdi, 18
+    jne y_18_exclude
+y_18_include:
+
+    push rax
+
+    # 17. 1 cell containing the total number of stacks currently in use by the IP (size of stack stack) (ip)
+
+y_18_exclude:
+    test rdi, rdi
+    jle y_17_include
+    cmp rdi, 17
+    jne y_17_exclude
+y_17_include:
+
+    # support for multiple stacks not yet available
+    push 1
+
+    # 16. 1 cell containing current (hour * 256 * 256) + (minute * 256) + (second) (env)
+
+y_17_exclude:
+    test rdi, rdi
+    jle y_16_include
+    cmp rdi, 16
+    jne y_16_exclude
+y_16_include:
+
+    # TODO
+    push 0
+
+    mov rax, 0xc9
+    mov rdi, 0
+    push r14
+    push r11
+    syscall
+    pop r11
+    pop r14
+
+    # rax: seconds since 1970-01-01 00:00:00 +0000 (UTC).
+
+    mov rcx, 60
+    div rcx
+
+    mov r9, rax # rax = (second)
+
+    mov rax, rdx
+    mov rcx, 60
+    div rcx
+
+    shl rdx, 8
+    add r9, rdx # rax = (minute * 256) + (second)
+
+    mov rax, rdx
+    mov rcx, 60
+    div rcx
+
+    shl rdx, 8
+    add r9, rdx # rax = (hour * 256 * 256) + (minute * 256) + (second)
+    push r9
+
+    # 15. 1 cell containing current ((year - 1900) * 256 * 256) + (month * 256) + (day of month) (env)
+
+y_16_exclude:
+    test rdi, rdi
+    jle y_15_include
+    cmp rdi, 15
+    jne y_15_exclude
+y_15_include:
+
+    # "Thirty days has September,
+    #  April, June, and November,
+    #  All the rest have thirty-one,
+    #  Except February because it's weird, like 28 usually but then 29 on leap years,
+    #  and leap years are every 4 years but NOT every 100 years except they ARE every 400 years..."
+
+    # TODO
+    push 0
+    
+    # 14. 1 vector containing the greatest point which contains a non-space cell, relative to the least point (env)
+
+y_15_exclude:
+    test rdi, rdi
+    jle y_14_include
+    cmp rdi, 14
+    jne y_14_exclude
+y_14_include:
+
+    # TODO
+    push 0
+    push 0
+
+    # 13. 1 vector containing the least point which contains a non-space cell, relative to the origin (env)
+    #         These two vectors are useful to give to the o instruction to output the entire program source as a text file.
+    
+y_14_exclude:
+    test rdi, rdi
+    jle y_13_include
+    cmp rdi, 13
+    jne y_13_exclude
+y_13_include:
+
+    # TODO
+    push 0
+    push 0
+
+    # 12. 1 vector containing the Funge-Space storage offset of the current IP (ip)
+
+y_13_exclude:
+    test rdi, rdi
+    jle y_12_include
+    cmp rdi, 12
+    jne y_12_exclude
+y_12_include:
+
+    # TODO - same as #10?
+    push 0
+    push 0
+
+    # 11. 1 vector containing the Funge-Space delta of the current IP (ip)
+
+y_12_exclude:
+    test rdi, rdi
+    jle y_11_include
+    cmp rdi, 11
+    jne y_11_exclude
+y_11_include:
+
+    cmp r14, {DIR_RIGHT}
+    jne y_ip_not_right
+    push 1
+    push 0
+    jmp y_11_set
+y_ip_not_right:
+    cmp r14, {DIR_DOWN}
+    jne y_ip_left_or_up
+    push 0
+    push -1
+    jmp y_11_set
+y_ip_left_or_up:
+    cmp r14, {DIR_LEFT}
+    jne y_ip_up
+    push -1
+    push 0
+    jmp y_11_set
+y_ip_up:
+    push 0
+    push 1
+y_11_set:
+
+    # 10. 1 vector containing the Funge-Space position of the current IP (ip)
+
+y_11_exclude:
+    test rdi, rdi
+    jle y_10_include
+    cmp rdi, 10
+    jne y_10_exclude
+y_10_include:
+
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    push rax # line
+    push rdx # char
+
+    # 9. 1 cell containing a unique team number for the current IP (ip)
+    #         Only significant for NetFunge, BeGlad, and the like.
+
+y_10_exclude:
+    test rdi, rdi
+    jle y_9_include
+    cmp rdi, 9
+    jne y_9_exclude
+y_9_include:
+
+    push 0
+
+    # 8. 1 cell containing a unique ID for the current IP (ip)
+    #         Only significant for Concurrent Funge. This ID differentiates this IP from all others currently in the IP list.
+
+y_9_exclude:
+    test rdi, rdi
+    jle y_8_include
+    cmp rdi, 8
+    jne y_8_exclude
+y_8_include:
+
+    push 0
+
+    # 7. 1 cell containing the number of scalars per vector (global env)
+    #         aka number of dimensions. 2 for Befunge, 1 for Unefunge, 3 for Trefunge.
+
+y_8_exclude:
+    test rdi, rdi
+    jle y_7_include
+    cmp rdi, 7
+    jne y_7_exclude
+y_7_include:
+
+    push 2
+
+    # 6. 1 cell containing a path seperator character (global env)
+    #         This is what path seperators for i and o filenames should look like.
+
+y_7_exclude:
+    test rdi, rdi
+    jle y_6_include
+    cmp rdi, 6
+    jne y_6_exclude
+y_6_include:
+
+    push '/' # since on linux
+
+    # 5. 1 cell containing an ID code for the Operating Paradigm (global env)
+    #         0 = Unavailable
+    #         1 = Equivalent to C-language system() call behaviour
+    #         2 = Equivalent to interpretation by a specific shell or program
+    #             This shell or program is specified by the interpreter but should ideally be customizable by the interpreter-user, if applicable. Befunge programs that run under this paradigm should document what program they expect to interpret the string passed to =.
+    #         3 = Equivalent to interpretation by the same shell as started this Funge interpreter, if applicable
+    #             If the interpreter supports this paradigm, then in this manner, the user executing a Befunge source can easily choose which shell to use for = instructions.
+    #         This value is included so the program can have a reasonable idea of what = will do. The values shown here are only the most basic set available at the time of publication. See the Registry for any late-breaking headway into further Operating Paradigms.
+
+y_6_exclude:
+    test rdi, rdi
+    jle y_5_include
+    cmp rdi, 5
+    jne y_5_exclude
+y_5_include:
+
+    push 0
+
+    # 4. 1 cell containing the implementation's version number (env)
+    #         If the version number contains points, they're stripped. v2.01 == 201, v1.03.05 = 10305, v1.5g = 1507. Don't use non-numbers in the version number to indicate 'personalizations' - change the handprint instead.
+
+y_5_exclude:
+    test rdi, rdi
+    jle y_4_include
+    cmp rdi, 4
+    jne y_4_exclude
+y_4_include:
+
+    # TODO
+    push 0
+
+    # 3. 1 cell containing the implementation's handprint (env).
+
+y_4_exclude:
+    test rdi, rdi
+    jle y_3_include
+    cmp rdi, 3
+    jne y_3_exclude
+y_3_include:
+
+    # "BFDLR"
+    mov rax, 0x4246444C52
+    push rax
+
+    # 2. 1 cell containing the number of bytes per cell (global env).
+    #         aka cell size. Typically 4, could also be 2, 8, really really large, infinity, etc.
+
+y_3_exclude:
+    test rdi, rdi
+    jle y_2_include
+    cmp rdi, 2
+    jne y_2_exclude
+y_2_include:
+
+    push 8
+
+    # 1. 1 cell containing flags (env).
+    #         Least Significant Bit 0 (0x01): high if t is implemented. (is this Concurrent Funge-98?)
+    #         Bit 1 (0x02): high if i is implemented.
+    #         Bit 2 (0x04): high if o is implemented.
+    #         Bit 3 (0x08): high if = is implemented.
+    #         Most Significant Bit 4 (0x10): high if unbuffered standard I/O (like getch()) is in effect, low if the usual buffered variety (like scanf("%c")) is being used.
+    #         Further more significant bits: undefined, should all be low in Funge-98
+
+y_2_exclude:
+    test rdi, rdi
+    jle y_1_include
+    cmp rdi, 1
+    jne y_1_exclude
+y_1_include:
+
+    push {0b10000}
+
+y_1_exclude:
+
+    """
+
+
     @fingerprint("BOOL")
     @define_instruction("A")
     def bool_and(self):
         return f"""
-        pop rdi
-        pop rsi
-        and rdi, rsi
-        not rdi
-        not rdi
-        push rdi
+    pop rdi
+    pop rsi
+    and rdi, rsi
+    not rdi
+    not rdi
+    push rdi
     """
 
 
@@ -1212,9 +1563,9 @@ skip_jumping:
     @define_instruction("N")
     def bool_not(self):
         return f"""
-        pop rdi
-        not rdi
-        push rdi
+    pop rdi
+    not rdi
+    push rdi
     """
 
 
@@ -1222,12 +1573,12 @@ skip_jumping:
     @define_instruction("O")
     def bool_or(self):
         return f"""
-        pop rdi
-        pop rsi
-        or rdi, rsi
-        not rdi
-        not rdi
-        push rdi
+    pop rdi
+    pop rsi
+    or rdi, rsi
+    not rdi
+    not rdi
+    push rdi
     """
 
 
@@ -1235,12 +1586,12 @@ skip_jumping:
     @define_instruction("X")
     def bool_xor(self):
         return f"""
-        pop rdi
-        pop rsi
-        xor rdi, rsi
-        not rdi
-        not rdi
-        push rdi
+    pop rdi
+    pop rsi
+    xor rdi, rsi
+    not rdi
+    not rdi
+    push rdi
     """
 
 
