@@ -1277,6 +1277,8 @@ y_17_include:
 y_17_exclude:
     test rdi, rdi
     jle y_16_include
+    cmp rdi, 15
+    je y_16_include # exception: 16 pre-req for 15 (wont be pushed though)
     cmp rdi, 16
     jne y_16_exclude
 y_16_include:
@@ -1310,6 +1312,9 @@ y_16_include:
 
     shl rdx, 16
     add r9, rdx # r9 = (hour * 256 * 256) + (minute * 256) + (second)
+
+    cmp rdi, 15
+    je y_16_exclude
     push r9
 
     # 15. 1 cell containing current ((year - 1900) * 256 * 256) + (month * 256) + (day of month) (env)
@@ -1422,9 +1427,20 @@ y_13_exclude:
     jne y_12_exclude
 y_12_include:
 
-    # TODO - same as #10?
-    push 0
-    push 0
+    # same as #10 since negative spaces not supported
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # get line and char indeces: (rax / self.width, rax % self.width)
+    mov rcx, {self.width + 4}
+    xor rdx, rdx
+    div rcx
+
+    push rax # line
+    push rdx # char
 
     # 11. 1 vector containing the Funge-Space delta of the current IP (ip)
 
