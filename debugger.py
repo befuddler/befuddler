@@ -3,6 +3,9 @@ from pathlib import Path
 import time
 import re
 
+WIDTH = 80
+HEIGHT = 25
+
 
 def render():
     log = Path("./gdb.txt").read_text()
@@ -21,29 +24,32 @@ def render():
 
     script = []
     for i in range(25):
+        start = (WIDTH + 4) * i
+        end = start + WIDTH
         script.append(
             "".join(
-                " " if c == 0xFF else chr(c) for c in funge_space[82 * i : 82 * i + 80]
+                " " if c == 0xFF else chr(c) for c in funge_space[start:end]
             )
         )
 
     offset = addr - program_start
     offset_instrs = offset // 10
-    yy, xx = divmod(offset_instrs, 82)
-    print(yy, xx)
+    yy, xx = divmod(offset_instrs, WIDTH + 4)
 
     RED = "\033[41m"
     RESET = "\033[0m"
     CLEAR = "\033[2J\033[H"
 
-    print(CLEAR)
+    screen = ""
     for y, line in enumerate(script):
         for x, c in enumerate(line):
             if (y, x) == (yy, xx):
-                print(f"{RED}{c}{RESET}", end="")
+                screen += f"{RED}{c}{RESET}"
+
             else:
-                print(f"{c}", end="")
-        print()
+                screen += f"{c}"
+        screen += "\n"
+    print(f"{CLEAR}{screen}", end="")
 
 
 while True:
