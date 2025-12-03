@@ -7,7 +7,7 @@ printf "STACK((%#lx))\n", *(long*)$rsp
 python
 import gdb
 addr = int(gdb.parse_and_eval("(char*)&funge_space"))
-mem = gdb.selected_inferior().read_memory(addr, 82*25)
+mem = gdb.selected_inferior().read_memory(addr, 84*25)
 print(f"FUNGE_SPACE(({mem.hex()}))")
 end
 end
