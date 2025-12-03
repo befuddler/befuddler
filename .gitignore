@@ -1,8 +1,8 @@
 gdb.txt
 befucked
-befucked.s
 befuddled
-befuddled.s
 hello_world
-hello_world.s
 Mycology
+.gdb_history
+__pycache__/
+*.s
