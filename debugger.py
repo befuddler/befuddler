@@ -23,12 +23,12 @@ def render():
         funge_space = bytes.fromhex(match[1])
 
     script = []
-    for i in range(25):
+    for i in range(HEIGHT):
         start = (WIDTH + 4) * i
         end = start + WIDTH
         script.append(
             "".join(
-                " " if c == 0xFF else chr(c) for c in funge_space[start:end]
+                " " if not 32 <= c <= 127 else chr(c) for c in funge_space[start:end]
             )
         )
 
