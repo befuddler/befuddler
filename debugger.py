@@ -72,9 +72,9 @@ def render():
             else:
                 screen += f"{c}"
         screen += "\n"
-    print(f"{CLEAR}{screen}")
+    print(f"{CLEAR}{screen.rstrip("\n")}")
 
 
 while True:
     render()
-    time.sleep(5)
+    time.sleep(0.01)
