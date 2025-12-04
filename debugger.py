@@ -71,9 +71,7 @@ def render():
                 screen += f"{RED}{c}{RESET}"
             else:
                 screen += f"{c}"
-        screen += "\n"
-    print(f"{CLEAR}{screen.rstrip("\n")}")
-
+    print(f"{CLEAR}{screen.rstrip("\n")}", end="")
 
 while True:
     render()
