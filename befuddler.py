@@ -185,6 +185,12 @@ error_bad_read:
 error_undefined_value:
     .string "ERROR: Attempt to access undefined value\\n"
 
+# for debugger
+width:
+    .quad {width}
+height:
+    .quad {height}
+
 direction_deltas:
     # used for quotes
     .quad 10 # right

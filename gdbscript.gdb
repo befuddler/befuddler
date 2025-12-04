@@ -1,6 +1,8 @@
 set logging enabled on
 set pagination off
 printf "PROGRAM_START((%#lx))\n", &program_start
+printf "WIDTH((%#lx))\n", (long)width
+printf "HEIGHT((%#lx))\n", (long)height
 b nexti_exit
 commands
 printf "STACK((%#lx))\n", *(long*)$rsp
