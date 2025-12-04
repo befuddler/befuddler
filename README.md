@@ -38,8 +38,6 @@ And in another terminal run the python script which watches the gdb logs (`gdb.t
 
 Step through the program using `c` in the gdb terminal.
 
-The debugger currently only supports Befunge-93.
-
 ## Testing
 
 [Mycology](https://github.com/Deewiant/Mycology) is a standard Befunge test suite. Run `./test_mycology.sh` to run these tests and verify that the output looks as expected.
