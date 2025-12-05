@@ -782,7 +782,7 @@ compare_fingerprint_ids:
     mov cl, byte ptr [input_buf + rdx]
     mov r9b, byte ptr [rsi]
     cmp cl, r9b
-    jne load_semantic_fail
+    jne load_semantic_match_not_found
     test cl, cl
     jz load_semantic_match_found
 
@@ -790,6 +790,7 @@ compare_fingerprint_ids:
     inc rsi
     jmp compare_fingerprint_ids
 
+load_semantic_match_not_found:
     inc rdi
     jmp search_fingerprint_table
 
