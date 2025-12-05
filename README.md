@@ -66,8 +66,9 @@ The `)` instruction currently always reflects after popping off the arguments. `
 
 Current fingerprints:
  - `BOOL`
- - `RAND` (`R` not supported due to lack of `FPSP`)
+ - `RAND` (`R` reflects due to lack of `FPSP`)
  - `BASE`
+ - `FORK`
 
 ## Known Limitations
 

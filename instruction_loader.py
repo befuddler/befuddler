@@ -2041,3 +2041,45 @@ O_number_built:
     pop r12
     pop r14
     """
+
+
+    @fingerprint("FORK")
+    @define_instruction("T")
+    def fork_process(self):
+        return f"""
+
+    mov rax, 57 # fork
+
+    push r14
+    push r12
+    push r11
+    syscall
+    pop r11
+    pop r12
+    pop r14
+
+    test rax, rax
+    jl fork_fail
+    jz fork_child
+    push rax
+    push 0 # parent
+    jmp fork_complete
+fork_child:
+    mov rax, 110 # getppid
+    push r14
+    push r12
+    push r11
+    syscall
+    pop r11
+    pop r12
+    pop r14
+    push rax
+    push 1 # child
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    jmp fork_complete
+fork_fail:
+    push 0
+    push -1
+fork_complete:
+    """
