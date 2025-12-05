@@ -71,6 +71,8 @@ def render():
                 screen += f"{RED}{c}{RESET}"
             else:
                 screen += f"{c}"
+        if len(line) < term_width:
+            screen += f"\n"
     print(f"{CLEAR}{screen.rstrip("\n")}", end="")
 
 while True:
