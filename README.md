@@ -72,4 +72,6 @@ Current fingerprints:
 
 ## Known Limitations
 
-To implement popping `0` from the stack when it is empty, we simply push a large number of zero bytes onto the stack at the start of each program. This may make generated programs vulnerable to stack smashing attacks.
+- To implement popping `0` from the stack when it is empty, we simply push a large number of zero bytes onto the stack at the start of each program. This may make generated programs vulnerable to stack smashing attacks.
+
+- In Funge-98 mode, the size of the direction vector values is 16 bits

@@ -132,9 +132,62 @@ class InstructionLoader:
 
 
     @define_instruction("#")
-    def skip(self):
+    @b93
+    def skip_b93(self):
         return f"""
     mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+    shl rdx, 1
+    sub r14, 5
+    add r14, rdx
+    """
+
+
+    @define_instruction("#")
+    @b98
+    def skip_b98(self):
+        return f"""
+handle_skip_b98:
+    test {REG_DIRECTION}, 4
+    jz hashtag_is_cardinal
+    mov rax, {REG_DIRECTION}
+    shr rax, 3
+    mov rsi, rax # dx
+    shr rax, 16
+    mov rdi, rax # dy
+    movsx rsi, si
+    movsx rdi, di
+    call get_line_char
+    shl rsi
+    shl rdi
+    add rdi, rax # y
+    add rsi, rdx # x
+
+    mov rax, rdi
+    cqo
+    mov rcx, {self.height}
+    idiv rcx
+    mov rdi, rdx
+    test rdx, rdx
+    jge skip_b98_scale_width
+    add rdi, rcx
+
+skip_b98_scale_width:
+    mov rax, rsi
+    cqo
+    mov rcx, {self.width}
+    idiv rcx
+    mov rsi, rdx
+    test rdx, rdx
+    jge skip_b98_pos_scaled
+    add rsi, rcx
+
+skip_b98_pos_scaled:
+    call set_line_char
+
+    jmp hashtag_not_cardinal
+hashtag_is_cardinal:
+    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+hashtag_not_cardinal:
     shl rdx, 1
     sub r14, 5
     add r14, rdx
@@ -428,8 +481,7 @@ get_in_range:
     test rax, rax
     jne get_in_range
 
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     jmp skip_g
 
 get_in_range:
@@ -493,8 +545,7 @@ put_in_range:
     test rax, rax
     jne put_in_range
 
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     jmp skip_p
 
 put_in_range:
@@ -529,16 +580,7 @@ skip_p:
     def string_mode_b93(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -568,13 +610,7 @@ string_mode_loop:
 
 string_mode_end:
     # jump to correct position
-    mov rax, rdi
-    imul rax, {self.width + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
+    call set_line_char
     """
 
 
@@ -583,16 +619,7 @@ string_mode_end:
     def string_mode_b98(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -630,13 +657,7 @@ space_seen:
     jmp string_mode_push_char
 string_mode_end:
     # jump to correct position
-    mov rax, rdi
-    imul rax, {self.width + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
+    call set_line_char
     """
 
 
@@ -722,10 +743,9 @@ int_not_negative:
 
     @define_instruction("r")
     @b98
-    def reflect(self):
+    def pure_reflect(self):
         return f"""
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     """
 
 
@@ -733,8 +753,24 @@ int_not_negative:
     @b98
     def turn_left(self):
         return f"""
+    test {REG_DIRECTION}, 4
+    jz left_is_cardinal
+    shr {REG_DIRECTION}, 3
+    mov rsi, {REG_DIRECTION}
+    shr {REG_DIRECTION}, 16
+    mov rdi, {REG_DIRECTION}
+    neg si
+    movzx {REG_DIRECTION}, di
+    shl {REG_DIRECTION}, 16
+    movzx rsi, si
+    or {REG_DIRECTION}, rsi
+    shl {REG_DIRECTION}, 3
+    or {REG_DIRECTION}, 4
+    jmp turn_left_end
+left_is_cardinal:
     dec {REG_DIRECTION}
     and {REG_DIRECTION}, 3
+turn_left_end:
     """
 
 
@@ -742,8 +778,25 @@ int_not_negative:
     @b98
     def turn_right(self):
         return f"""
+    test {REG_DIRECTION}, 4
+    jz right_is_cardinal
+right_not_cardinal:
+    shr {REG_DIRECTION}, 3
+    mov rsi, {REG_DIRECTION}
+    shr {REG_DIRECTION}, 16
+    mov rdi, {REG_DIRECTION}
+    neg di
+    movzx {REG_DIRECTION}, di
+    shl {REG_DIRECTION}, 16
+    movzx rsi, si
+    or {REG_DIRECTION}, rsi
+    shl {REG_DIRECTION}, 3
+    or {REG_DIRECTION}, 4
+    jmp turn_right_end
+right_is_cardinal:
     inc {REG_DIRECTION}
     and {REG_DIRECTION}, 3
+turn_right_end:
     """
 
 
@@ -812,8 +865,7 @@ keep_loading_semantic:
     jmp keep_loading_semantic
 
 load_semantic_fail:
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
 load_semantic_end:
     """
 
@@ -831,8 +883,7 @@ unload_semantic:
     dec rdi
     jmp unload_semantic
 semantic_unload_fail:
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     """
 
 
@@ -861,8 +912,13 @@ semantic_unload_fail:
 greater:
     inc rax
 dont_turn:
-    add {REG_DIRECTION}, rax
+    test rax, rax
+    jz compare_end
+    test {REG_DIRECTION}, 4
+    jnz right_not_cardinal
+    inc {REG_DIRECTION}
     and {REG_DIRECTION}, 3
+compare_end:
     """
 
 
@@ -871,16 +927,7 @@ dont_turn:
     def jump_over(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -906,13 +953,7 @@ jump_over_loop:
 
 jump_over_end:
     # jump to correct position
-    mov rax, rdi
-    imul rax, {self.width + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
+    call set_line_char
     """
 
     @define_instruction("z")
@@ -936,23 +977,10 @@ jump_over_end:
     test r10, r10
     jnz run_iterate
     # Special case, zero acts as skip
-    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
-    shl rdx, 1
-    sub r14, 5
-    add r14, rdx
-    jmp end_iterate
+    jmp handle_skip_b98
 
 run_iterate:
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -986,13 +1014,7 @@ keep_skipping:
     jnz iterate_bad_char_or_skips
 
     # jump to correct position
-    mov rax, rdi
-    imul rax, {self.width + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
+    call set_line_char
 
     jmp end_iterate
 normal_iterate:
@@ -1034,16 +1056,7 @@ end_iterate:
     def push_char(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -1064,10 +1077,7 @@ end_iterate:
     push rdx
 
     # jump to correct position
-    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
-    shl rdx, 1
-    sub r14, 5
-    add r14, rdx
+    jmp handle_skip_b98
     """
 
 
@@ -1076,16 +1086,7 @@ end_iterate:
     def store_char(self):
         return f"""
     # compute cell index: (r14 - program_start) / 10
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -1104,10 +1105,7 @@ end_iterate:
     mov byte ptr [funge_space + rax], dl
 
     # jump to correct position
-    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
-    shl rdx, 1
-    sub r14, 5
-    add r14, rdx
+    jmp handle_skip_b98
     """
 
 
@@ -1115,20 +1113,19 @@ end_iterate:
     @b98
     def absolute_delta(self):
         return f"""
-    # NOTE - this reflects on non-cardinal directions
     pop rsi # y
     pop rdi # x
     test rdi, rdi
     jz delta_x_zero
     test rsi, rsi
-    jnz bad_delta
+    jnz non_cardinal_delta
     cmp rdi, 1
     jne delta_y_zero_x_not_1
     mov {REG_DIRECTION}, {DIR_RIGHT}
     jmp delta_set
 delta_y_zero_x_not_1:
     cmp rdi, -1
-    jne bad_delta
+    jne non_cardinal_delta
     mov {REG_DIRECTION}, {DIR_LEFT}
     jmp delta_set
 delta_x_zero:
@@ -1138,12 +1135,17 @@ delta_x_zero:
     jmp delta_set
 delta_x_zero_y_not_1:
     cmp rsi, -1
-    jne bad_delta
+    jne non_cardinal_delta
     mov {REG_DIRECTION}, {DIR_DOWN}
     jmp delta_set
-bad_delta:
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+non_cardinal_delta:
+    movzx rsi, si
+    movzx rdi, di
+    mov {REG_DIRECTION}, rsi
+    shl {REG_DIRECTION}, 16
+    or {REG_DIRECTION}, rdi
+    shl {REG_DIRECTION}, 3
+    or {REG_DIRECTION}, 4
 delta_set:
     """
 
@@ -1154,16 +1156,7 @@ delta_set:
         return f"""
     pop r10 # number of times to skip
 
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     mov rdi, rax # line
     mov rsi, rdx # char
@@ -1172,14 +1165,12 @@ delta_set:
     jg jump_forwards_loop
     jz skip_jumping
 
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
 jump_backwards_loop:
     call update_line_char
     inc r10
     jnz jump_backwards_loop
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     jmp jumping_done
 
 jump_forwards_loop:
@@ -1189,13 +1180,7 @@ jump_forwards_loop:
 
 jumping_done:
     # jump to correct position
-    mov rax, rdi
-    imul rax, {self.width + 4}
-    add rax, rsi
-    imul rax, 10
-    add rax, OFFSET program_start
-    add rax, 5
-    mov r14, rax
+    call set_line_char
 skip_jumping:
     """
 
@@ -1429,16 +1414,7 @@ y_13_exclude:
 y_12_include:
 
     # same as #10 since negative spaces not supported
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
+    call get_line_char
 
     push rax # line
     push rdx # char
@@ -1483,17 +1459,8 @@ y_11_exclude:
     jne y_10_exclude
 y_10_include:
 
-    mov rax, r14
-    sub rax, OFFSET program_start
-    mov rcx, 10
-    xor rdx, rdx
-    div rcx
-
-    # get line and char indeces: (rax / self.width, rax % self.width)
-    mov rcx, {self.width + 4}
-    xor rdx, rdx
-    div rcx
-
+    call get_line_char
+    
     push rax # line
     push rdx # char
 
@@ -1704,8 +1671,9 @@ y_1_exclude:
     def rand_get_fpsp_rand(self):
         return f"""
     # NOT SUPPORTED ; REFLECT
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    push r14
+    call reflect
+    pop r14
     """
 
 
@@ -2076,8 +2044,7 @@ fork_child:
     pop r14
     push rax
     push 1 # child
-    add {REG_DIRECTION}, 2
-    and {REG_DIRECTION}, 3
+    call reflect
     jmp fork_complete
 fork_fail:
     push 0

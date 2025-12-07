@@ -158,6 +158,57 @@ semantic_lut:
     else:
         b98_data = f""
 
+    if b98:
+        nexti = f"""
+    pop r14
+    test {REG_DIRECTION}, 4
+    jnz nexti_not_cardinal
+    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+    sub r14, 10
+    add r14, rdx
+    push r14
+    jmp nexti_exit
+nexti_not_cardinal:
+    mov rax, {REG_DIRECTION}
+    shr rax, 3
+    mov rsi, rax # dx
+    shr rax, 16
+    mov rdi, rax # dy
+    movsx rsi, si
+    movsx rdi, di
+    call get_line_char
+    add rdi, rax # y
+    add rsi, rdx # x
+
+    mov rax, rdi
+    cqo
+    mov rcx, {height}
+    idiv rcx
+    mov rdi, rdx
+
+    mov rax, rsi
+    cqo
+    mov rcx, {width}
+    idiv rcx
+    mov rsi, rdx
+    call set_line_char
+    sub r14, 15
+    push r14
+nexti_exit:
+    ret
+"""
+    else:
+        nexti = f"""
+    pop r14
+    test {REG_DIRECTION}, 4
+    mov rdx, [direction_deltas + {REG_DIRECTION}*8]
+    sub r14, 10
+    add r14, rdx
+    push r14
+nexti_exit:
+    ret
+"""
+
     return f""".intel_syntax noprefix
 
 .file "compiled.s"
@@ -233,6 +284,27 @@ bottom_edge:
     push r14
     ret
 
+reflect:
+    test {REG_DIRECTION}, 4
+    jz reflect_is_cardinal
+    shr {REG_DIRECTION}, 3
+    mov rsi, {REG_DIRECTION}
+    shr {REG_DIRECTION}, 16
+    mov rdi, {REG_DIRECTION}
+    neg si
+    neg di
+    movzx {REG_DIRECTION}, si
+    shl {REG_DIRECTION}, 16
+    movzx rdi, di
+    or {REG_DIRECTION}, rdi
+    shl {REG_DIRECTION}, 3
+    or {REG_DIRECTION}, 4
+    ret
+reflect_is_cardinal:
+    add {REG_DIRECTION}, 2
+    and {REG_DIRECTION}, 3
+    ret
+
 in_range:
     # check if x=rdi, y=rsi is in range
     # return iff in range
@@ -250,9 +322,38 @@ in_range_exit:
 
 nexti:
     pop r14
+    test {REG_DIRECTION}, 4
+    jnz nexti_not_cardinal
     mov rdx, [direction_deltas + {REG_DIRECTION}*8]
     sub r14, 10
     add r14, rdx
+    push r14
+    jmp nexti_exit
+nexti_not_cardinal:
+    mov rax, {REG_DIRECTION}
+    shr rax, 3
+    mov rsi, rax # dx
+    shr rax, 16
+    mov rdi, rax # dy
+    movsx rsi, si
+    movsx rdi, di
+    call get_line_char
+    add rdi, rax # y
+    add rsi, rdx # x
+
+    mov rax, rdi
+    cqo
+    mov rcx, {height}
+    idiv rcx
+    mov rdi, rdx
+
+    mov rax, rsi
+    cqo
+    mov rcx, {width}
+    idiv rcx
+    mov rsi, rdx
+    call set_line_char
+    sub r14, 15
     push r14
 nexti_exit:
     ret
@@ -276,6 +377,33 @@ exit_with_error:
     mov rax, 60
     mov rdi, 1
     syscall
+
+get_line_char:
+    # put (line, char) in (rax, rdx)
+    # clobbers rcx
+    mov rax, r14
+    sub rax, OFFSET program_start
+    mov rcx, 10
+    xor rdx, rdx
+    div rcx
+
+    # get line and char indeces: (rax / width, rax % width)
+    mov rcx, {width + 4}
+    xor rdx, rdx
+    div rcx
+    ret
+
+set_line_char:
+    # set (line, char) to (rdi, rsi)
+    # clobbers rax
+    mov rax, rdi
+    imul rax, {width + 4}
+    add rax, rsi
+    imul rax, 10
+    add rax, OFFSET program_start
+    add rax, 5
+    mov r14, rax
+    ret
 
 update_line_char:
     # assume line and char in rdi and rsi
@@ -310,11 +438,50 @@ update_line_char_dir_up_or_down:
 
     jmp line_char_updated
 update_line_char_dir_up:
-
+    test {REG_DIRECTION}, 4
+    jnz update_line_char_not_cardinal
     dec rdi
     cmp rdi, -1
     jne line_char_updated
     mov rdi, {height - 1}
+    jmp line_char_updated
+update_line_char_not_cardinal:
+    push rsi
+    push rdi
+    mov rax, {REG_DIRECTION}
+    shr rax, 3
+    mov rsi, rax # dx
+    shr rax, 16
+    mov rdi, rax # dy
+    movsx rsi, si
+    movsx rdi, di
+    pop rax
+    pop rdx
+    add rdi, rax # y
+    add rsi, rdx # x
+
+    mov rax, rdi
+    cqo
+    mov rcx, {height}
+    idiv rcx
+    mov rdi, rdx
+    test rdx, rdx
+    jge update_scale_width
+    add rdi, rcx
+
+update_scale_width:
+
+    mov rax, rsi
+    cqo
+    mov rcx, {width}
+    idiv rcx
+    mov rsi, rdx
+    test rdx, rdx
+    jge update_pos_scaled
+    add rdi, rcx
+
+update_pos_scaled:
+    call set_line_char
 line_char_updated:
     ret
 
@@ -354,6 +521,7 @@ seed_in_rax:
     xor al, al
     rep stosb
 
+    # TODO - update to handle arb-dir
     xor {REG_DIRECTION}, {REG_DIRECTION}
 
     jmp program_start
