@@ -818,6 +818,8 @@ turn_right_end:
     def load_semantics(self):
         return f"""
     pop rdi
+    test rdi, rdi
+    jl load_semantic_fail
     xor rdx, rdx # index
 load_semantic:
     cmp rdi, rdx
@@ -888,14 +890,16 @@ load_semantic_end:
     def unload_semantics(self):
         return f"""
     pop rdi
+    test rdi, rdi
+    jl unload_semantic_fail
 unload_semantic:
     test rdi, rdi
     # always fail
-    jz semantic_unload_fail
+    jz unload_semantic_fail
     pop rsi
     dec rdi
     jmp unload_semantic
-semantic_unload_fail:
+unload_semantic_fail:
     call reflect
     """
 
