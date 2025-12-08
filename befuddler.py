@@ -25,23 +25,25 @@ RED = "\033[31m"
 YELLOW='\033[33m'
 RESET = "\033[0m"
 
-FORM_FEED = chr(0x0c)
+FORM_FEED = b"\x0c"
 
 def parse_befunge(source: str, width: int, height: int):
-    if "\t" in source:
+    if b"\t" in source:
         print(f"{YELLOW}WARNING:{RESET} tab found in source")
 
-    lines = (source.replace('\r\n', '\n')
-                   .replace('\r', '\n')
-                   .replace(FORM_FEED, "")
-                   .split('\n'))
+    lines = (source.replace(b"\r\n", b"\n")
+                   .replace(b"\r", b"\n")
+                   .replace(FORM_FEED, b"")
+                   .split(b"\n"))
     lines = lines[:height]
-    result = [list(line[:width].ljust(width)) for line in lines]
-    result.extend([[" "] * width] * (height- len(result)))
+    result = [
+    [bytes([c]) for c in line[:width].ljust(width)]
+        for line in lines
+    ]
+    result.extend([[b" "] * width] * (height - len(result)))
     return result
 
-
-def compile_befunge(befunge: list[list[str]],
+def compile_befunge(befunge: list[list[bytes]],
                     width: int, height: int, b98: bool,
                     debug: bool):
     instruction_functions = ""
@@ -77,7 +79,7 @@ program_start:"""
             elif j >= width:
                 name = "right_edge"
             else:
-                name = instruction_names.get(befunge[i][j])
+                name = instruction_names.get(ord(befunge[i][j]))
                 if debug:
                     if name:
                         print(f"{RESET}{befunge[i][j]}", end="")
@@ -101,14 +103,14 @@ program_start:"""
     for y, row in enumerate(befunge):
         for x, instruction in enumerate(row):
             funge_space += f"""
-    .byte {ord(instruction)}"""
+    .byte 0x{instruction.hex()}"""
         funge_space += f"""
     .byte 0""" * 4
 
     instruction_lut = ""
     for i in range(256):
         default_instruction = "reflect" if b98 else "nop"
-        function_name = instruction_names.get(chr(i), default_instruction)
+        function_name = instruction_names.get(i, default_instruction)
         instruction_lut += f"""
     .quad {function_name}"""
 
@@ -128,7 +130,7 @@ program_start:"""
             """
             for char, name, code in functions:
                 fingerprint_sections += f"""
-    .quad {ord(char) - ord('A')}
+    .quad {char - ord('A')}
     .quad {name}
 """
 
@@ -504,10 +506,10 @@ def get_fit_size(source: Path):
     max_len = 0
     line_count = 0
 
-    with source.open("r", encoding="latin-1") as f:
+    with source.open("rb") as f:
         for line in f:
             line_count += 1
-            max_len = max(max_len, len(line.rstrip("\n")))
+            max_len = max(max_len, len(line.rstrip(b"\n")))
 
     width = max_len
     height = line_count
@@ -538,7 +540,7 @@ def main():
         height = args.height
 
 
-    parsed = parse_befunge(args.source.read_text("latin-1"), width, height)
+    parsed = parse_befunge(args.source.read_bytes(), width, height)
     compiled = compile_befunge(parsed, width, height, args.b98, args.debug)
     asm = args.source.with_suffix(".s")
     exe = args.source.with_name(args.source.stem)

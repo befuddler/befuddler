@@ -16,7 +16,7 @@ STACK_ZERO_SIZE = 0x1000
 
 def define_instruction(char):
     def decorator(f):
-        f._instruction_name = char
+        f._instruction_name = ord(char)
         return f
     return decorator
 
@@ -57,16 +57,16 @@ class InstructionLoader:
 
 
     def integer_instructions(self):
-        for d in ("0123456789abcdef" if self.b98 else "0123456789"):
+        for d in (b"0123456789abcdef" if self.b98 else b"0123456789"):
             self.defined_instructions[d] = f"""
-    push 0x{d}
+    push 0x{chr(d)}
 """
-            self.instruction_names[d] = f"integer_{d}"
+            self.instruction_names[d] = f"integer_{chr(d)}"
 
 
     def build_semantics(self):
         for i in range(26):
-            c = chr(ord('A') + i)
+            c = ord('A') + i
             self.defined_instructions[c] = f"""
     push r14
     mov rdx, {i}
