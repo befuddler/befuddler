@@ -1647,21 +1647,15 @@ push_stack_negative_input:
     test r9, r9
     jnz push_stack_negative_input
 push_stack_non_negative_input:
-    dec r9
     shl r9, 3
     add r9, rsp
 
-    mov rsi, rsp
+    mov r13, rsp
+    mov r15, r8
+    mov r10, rbp
 
-    mov rax, qword ptr [r9]
-    mov r10, qword ptr -8[r9]
-    mov qword ptr [r9], rbp
-    mov qword ptr -8[r9], r8
-    lea rsp, -{STACK_ZERO_SIZE + 16}[r9]
-    mov rbp, r9
-
-    push rax
-    push rsi
+    lea rsp, -{STACK_ZERO_SIZE + 24}[r9]
+    lea rbp, -24[r9]
 
     call get_line_char
     mov rdi, rax
@@ -1672,24 +1666,22 @@ push_stack_non_negative_input:
     mov esi, esi
     or r8, rsi
 
-    pop rsi
-    pop rax
-
-    cmp r9, rsi
-    jl toss_took_soss
-    push rax
-    sub r9, 8
-    mov qword ptr [r9], 0
-
 keep_taking_soss:
-    cmp r9, rsi
-    jl toss_took_soss
-    push r10
+    cmp r9, r13
+    je toss_took_soss
     sub r9, 8
-    mov r10, qword ptr [r9]
+    push qword ptr [r9]
     mov qword ptr [r9], 0
     jmp keep_taking_soss
 toss_took_soss:
+
+    mov qword ptr [rbp], r10
+    mov r10d, r15d
+    mov qword ptr 8[rbp], r10
+    mov r10, r15
+    shr r10, 32
+    mov qword ptr 16[rbp], r10
+
     """
 
 
@@ -1706,25 +1698,27 @@ toss_took_soss:
 
     cmp qword ptr [rbp], 0
     je cant_pop_last_stack
-    mov r8, qword ptr -8[rbp]
-    lea rsp, 8[rbp]
+    mov r8d, dword ptr 8[rbp]
+    mov r15, qword ptr 16[rbp] 
+    shl r15, 32
+    or r8, r15
+
+    lea rsp, 24[rbp]
     mov rbp, qword ptr [rbp]
-    jmp pop_stack_end
-cant_pop_last_stack:
-    call reflect
-    jmp soss_done_adding
-pop_stack_end:
+soss_keep_removing:
     test r9, r9
     jge soss_done_removing
-    pop rax
+    add rsp, 8
     add r9, 8
-    jmp pop_stack_end
+    jmp soss_keep_removing
 soss_done_removing:
     cmp rsi, rdi
     jle soss_done_adding
     sub rsi, 8
     push qword ptr [rsi]
     jmp soss_done_removing
+cant_pop_last_stack:
+    call reflect
 soss_done_adding:
     """
 
@@ -1741,7 +1735,6 @@ soss_done_adding:
 
     cmp qword ptr [rbp], 0
     je u_cant_pop_last_stack
-    mov r13, qword ptr -8[rbp]
     mov r15, qword ptr [rbp]
     test r9, r9
     jl u_neg
@@ -1749,23 +1742,20 @@ u_pos: # soss to toss
     cmp rsp, rsi
     je u_done
     push qword ptr 8[rbp]
+    mov qword ptr [rbp], 0
     add rbp, 8
-    mov qword ptr -16[rbp], 0
-    mov qword ptr -8[rbp], r13
-    mov qword ptr [rbp], r15
     jmp u_pos
 u_neg: # toss to soss
     cmp rsp, rsi
     je u_done
     pop r9
-    mov qword ptr 8[rbp], r9
+    mov qword ptr [rbp], r9
     sub rbp, 8
-    mov qword ptr -8[rbp], r13
-    mov qword ptr [rbp], r15
     jmp u_neg
 u_cant_pop_last_stack:
     call reflect
 u_done:
+    mov qword ptr [rbp], r15
     """
 
 

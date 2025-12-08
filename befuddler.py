@@ -479,7 +479,6 @@ seed_in_rax:
     # save rsp
     push 0 # signal bottom of stack stack
     mov rbp, rsp
-    push 0 # filler
 
     # reserve {STACK_ZERO_SIZE} zero bytes on the stack
     sub rsp, {STACK_ZERO_SIZE}
