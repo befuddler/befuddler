@@ -25,11 +25,16 @@ RED = "\033[31m"
 YELLOW='\033[33m'
 RESET = "\033[0m"
 
+FORM_FEED = chr(0x0c)
+
 def parse_befunge(source: str, width: int, height: int):
     if "\t" in source:
         print(f"{YELLOW}WARNING:{RESET} tab found in source")
 
-    lines = source.splitlines()
+    lines = (source.replace('\r\n', '\n')
+                   .replace('\r', '\n')
+                   .replace(FORM_FEED, "")
+                   .split('\n'))
     lines = lines[:height]
     result = [list(line[:width].ljust(width)) for line in lines]
     result.extend([[" "] * width] * (height- len(result)))
